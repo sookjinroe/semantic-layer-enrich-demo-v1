@@ -86,6 +86,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15
   <div class="brand"><b>Render</b> v2 · 신호 소비 + 디스크립션 합성</div>
   <div class="sub">합성기+판단기 · 부분 커버리지 · peek_* signal-ops</div>
   <div class="spacer"></div>
+  <div class="model" id="keystatus" title="아티팩트 밖(GitHub Pages 등)에서 실행 시 본인 Anthropic API 키 필요 — 브라우저에만 저장" style="cursor:pointer;margin-right:14px">⚙ key</div>
   <div class="model">model: claude-sonnet-4-6</div>
 </div>
 <div class="stage">
@@ -676,9 +677,26 @@ function parseJson(text){
   if(a>=0){let d=0;for(let i=a;i<t.length;i++){if(t[i]==="{")d++;else if(t[i]==="}"){d--;if(!d){try{return JSON.parse(t.slice(a,i+1));}catch(e){break;}}}}}
   throw new Error("JSON 파싱 실패: "+t.slice(0,120));
 }
+let API_KEY = "";
+try { API_KEY = localStorage.getItem("anthropic_key") || ""; } catch(e){}
+function updateKeyStatus(){
+  const el=document.getElementById("keystatus"); if(!el) return;
+  el.textContent = API_KEY ? "● key set" : "⚙ key";
+  el.style.color = API_KEY ? "var(--high)" : "var(--med)";
+}
+function setKey(){
+  const k = prompt("Anthropic API key — 아티팩트 밖(GitHub Pages 등)에서 실행할 때만 필요.\n브라우저 localStorage에만 저장되고 레포엔 안 올라감.", API_KEY);
+  if(k!==null){ API_KEY=k.trim(); try{localStorage.setItem("anthropic_key",API_KEY);}catch(e){} updateKeyStatus(); }
+}
 async function complete(system, user){
+  const headers = {"Content-Type":"application/json"};
+  if(API_KEY){                                   // Pages/standalone: 사용자 키로 브라우저 직접 호출
+    headers["x-api-key"] = API_KEY;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }                                              // 아티팩트 런타임: 키 없이 호출(런타임이 인증 주입)
   const resp = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST", headers,
     body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, system, messages:[{role:"user",content:user}] })
   });
   if(!resp.ok) throw new Error("HTTP "+resp.status);
@@ -726,6 +744,8 @@ Object.keys(SIGNAL_STORE).sort().forEach(col=>{
 });
 
 const CONFC={HIGH:"var(--high)",MEDIUM:"var(--med)",LOW:"var(--low)"};
+document.getElementById("keystatus").onclick = setKey;
+updateKeyStatus();
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function row(dotColor, lab, bodyHtml, last){
   const ev=document.createElement("div"); ev.className="ev";
