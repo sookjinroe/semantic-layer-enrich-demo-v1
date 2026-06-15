@@ -141,6 +141,15 @@ if __name__ == "__main__":
         json.dump(store, f, ensure_ascii=False, indent=2, sort_keys=True)
         f.write("\n")
     print(f"[signal_store] {len(store)} columns → {os.path.normpath(out)}")
+    # NL 패턴: 번들 JS 로도 emit (Pages에서 <script src> 로 로드, window 전역).
+    js_out = os.path.join(here, "..", "app", "data", "signal-store.js")
+    os.makedirs(os.path.dirname(js_out), exist_ok=True)
+    with open(js_out, "w", encoding="utf-8") as f:
+        f.write("// 생성됨: build/build_signals.py — 직접 수정 금지. window.SIGNAL_STORE 전역.\n")
+        f.write("window.SIGNAL_STORE = ")
+        json.dump(store, f, ensure_ascii=False, indent=2, sort_keys=True)
+        f.write(";\n")
+    print(f"[bundle]       → {os.path.normpath(js_out)}")
     for cid, rec in sorted(store.items()):
         present = [k for k, v in rec["static"].items() if v.get("present")]
         prof = "data" if rec["profile"].get("present") else "-"
