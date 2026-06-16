@@ -1,3 +1,4 @@
-# 키는 리포에 절대 넣지 않는다 (public 리포 키는 시크릿 스캐닝으로 자동 비활성화됨)
 local-config.js
 .env
+node_modules/
+package-lock.json

@@ -1,3 +1,3 @@
-// 이 파일을 local-config.js 로 복사(gitignore됨)하면 로컬에서 라이브 실행 시 키가 자동 주입된다.
-// app/index.html 이 <script src="local-config.js"> 로 먼저 로드한다.
+// 복사: cp local-config.example.js local-config.js  (gitignore 됨)
+// 로컬에서 키를 주입하려면 아래에 본인 Anthropic 키를 넣는다.
 window.ANTHROPIC_KEY = "sk-ant-...";

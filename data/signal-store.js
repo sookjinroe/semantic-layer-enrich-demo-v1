@@ -1,4 +1,5 @@
-{
+// 생성됨: build/build_signals.py — 직접 수정 금지. window.SIGNAL_STORE 전역.
+window.SIGNAL_STORE = {
   "columns": {
     "CARD_APPL.ISSUE_STAT_CD": {
       "archetype": "tier2-success",
@@ -414,4 +415,4 @@
       "1004": "수시입출금예금"
     }
   }
-}
+};

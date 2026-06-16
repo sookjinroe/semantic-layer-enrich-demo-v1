@@ -1,0 +1,18 @@
+{
+  "name": "render-v2",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Render v2 — 부산물 신호 + 연결 검증 증강 에이전트",
+  "scripts": {
+    "build": "python3 build/build_signals.py && python3 build/build_corpus.py",
+    "check:data": "python3 verify/check_data.py",
+    "check:harness": "node verify/harness_test.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7",
+    "@babel/preset-react": "^7",
+    "jsdom": "^24",
+    "react": "^18",
+    "react-dom": "^18"
+  }
+}
