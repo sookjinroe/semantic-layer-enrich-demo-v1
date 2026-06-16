@@ -1,0 +1,379 @@
+// ============================================================
+// render-screen.jsx — Render 에이전트 실행 화면 (NL2SQL-Agent 'nl.jsx' 패턴 계승).
+//   행동(op 요청 → 완료 + 결과) → 생각 → 최종(답변 카드). 타임드 reveal·follow/abort.
+//   좌: 제어 + 요약 + 테이블별 컬럼 목록. 우: 트레이스(60%) + 컬럼 상세(40%).
+//   window.RenderScreen 으로 노출.
+// ============================================================
+const { useState: rUseState, useRef: rUseRef, useEffect: rUseEffect } = React;
+
+const R_T = { live: { think: 360, req: 520, done: 460 }, batch: { think: 50, req: 70, done: 60 } };
+const CONFC = { HIGH: "var(--high)", MEDIUM: "var(--med)", LOW: "var(--low)" };
+const rmono = { fontFamily: "var(--mono)" };
+const rsleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TIER2 = new Set(["grep_code", "read_file", "find_refs"]);
+
+// 트레이스(canonical) → 표시 이벤트 (스냅샷 즉시 재생용)
+function traceToEvents(trace) {
+  const ev = [];
+  for (const s of trace || []) {
+    if (s.kind === "op") {
+      if (s.thinking) ev.push({ k: "think", text: s.thinking });
+      ev.push({ k: "op", op: s.op, args: s.args, status: "done", result: s.result });
+    } else if (s.kind === "answer") ev.push({ k: "answer", answer: s });
+  }
+  return ev;
+}
+function answerOf(trace) { const a = (trace || []).filter((s) => s.kind === "answer").pop(); return a || null; }
+
+function MarkerChip({ cid }) {
+  const [pos, setPos] = rUseState(null);
+  const ref = rUseRef(null);
+  const a = window.RenderMeta.arch(cid);
+  if (!a.marker) return null;
+  const W = 270;
+  const show = () => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const above = r.top > 130;
+    let cx = r.left + r.width / 2;
+    cx = Math.max(8 + W / 2, Math.min(window.innerWidth - 8 - W / 2, cx));
+    setPos({ x: cx, y: above ? r.top - 6 : r.bottom + 6, placement: above ? "above" : "below" });
+  };
+  return (
+    <span ref={ref} style={{ display: "inline-block", flexShrink: 0 }}
+      onMouseEnter={show} onMouseLeave={() => setPos(null)}>
+      <span style={{ ...rmono, fontSize: 11, color: a.color, border: `1px solid ${a.color}55`, borderRadius: 3, padding: "0px 4px" }}>{a.marker}</span>
+      {pos && (
+        <span style={{ position: "fixed", left: pos.x, top: pos.y,
+          transform: `translateX(-50%) ${pos.placement === "above" ? "translateY(-100%)" : ""}`,
+          zIndex: 9999, background: "#13161b", border: "1px solid var(--border, var(--rule))", borderRadius: 5,
+          padding: "7px 11px", width: W, boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal" }}>
+          <span style={{ ...rmono, fontSize: 12, color: a.color, display: "block", marginBottom: 3 }}>{a.marker} · 기대: {a.expect}</span>
+          <span style={{ fontSize: 13.5, color: "var(--muted, var(--dim))", lineHeight: 1.6 }}>{a.tip}</span>
+        </span>)}
+    </span>);
+}
+
+function ColumnRow({ cid, r, active, busy, onView, onRun }) {
+  const [hover, setHover] = rUseState(false);
+  const ans = r && r.answer;
+  const running = r && r.status === "running";
+  const viewable = r && (r.status === "done" || running);
+  const done = r && r.status === "done";
+  const dotColor = ans ? CONFC[ans.confidence] : (running ? "var(--sig)" : "var(--rule)");
+  const short = cid.split(".").pop();
+  return (
+    <div onClick={() => { if (viewable) onView(); }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ padding: "5px 8px", borderRadius: 4, cursor: viewable ? "pointer" : "default", transition: "background .12s",
+        background: active ? "rgba(255,255,255,0.05)" : (hover ? "rgba(255,255,255,0.025)" : "transparent"),
+        borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent" }}>
+      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+        <span style={{ width: 7, height: 7, borderRadius: 7, flexShrink: 0, background: dotColor }} />
+        <span style={{ ...rmono, fontSize: 13, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{short}</span>
+        <MarkerChip cid={cid} />
+        {ans && ans.route_to_human && ans.route_to_human.needed &&
+          <span style={{ ...rmono, fontSize: 10, color: "#0c0e11", background: "var(--low)", borderRadius: 8, padding: "0 6px", fontWeight: 600 }}>사람</span>}
+        <span onClick={(e) => { e.stopPropagation(); onRun(); }} title={done ? "다시 실행" : "실행"}
+          style={{ ...rmono, fontSize: 13, flexShrink: 0, padding: "1px 6px", borderRadius: 4,
+            cursor: busy ? "default" : "pointer", opacity: busy ? 0.3 : (hover ? 1 : 0.5), transition: "opacity .12s",
+            color: done ? "var(--sig)" : "var(--accent)", border: `1px solid ${done ? "var(--sig)" : "var(--accent)"}${hover ? "88" : "44"}` }}>▷</span>
+      </div>
+    </div>);
+}
+
+function RenderScreen() {
+  const [results, setResults] = rUseState({});
+  const [active, setActive] = rUseState(null);
+  const [busy, setBusy] = rUseState(false);
+  const [note, setNote] = rUseState(null);
+  const abortRef = rUseRef(false);
+  const followRef = rUseRef(true);
+  const runningRef = rUseRef(null);
+  const fileRef = rUseRef(null);
+  const groups = window.RenderMeta.groupByTable();
+  const allCols = groups.flatMap((g) => g.cols);
+
+  const setRes = (id, patch) => setResults((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
+
+  async function runOne(cid, live) {
+    if (!window.RenderAPI.hasKey()) {
+      setNote("API 키가 필요합니다 — 아래에 입력하거나 '스냅샷 불러오기'로 기록을 재생하세요.");
+      return;
+    }
+    const T = live ? R_T.live : R_T.batch;
+    runningRef.current = cid;
+    if (live || followRef.current) setActive(cid);
+    setRes(cid, { status: "running", events: [], answer: null, trace: null });
+    const events = [];
+    const push = (e) => { events.push(e); setRes(cid, { events: [...events] }); };
+
+    const onStep = async (e) => {
+      if (e.kind === "think") { push({ k: "think", text: e.text }); await rsleep(T.think); }
+      else if (e.kind === "op_request") { push({ k: "op", op: e.op, args: e.args, status: "req" }); await rsleep(T.req); }
+      else if (e.kind === "op_done") {
+        const i = events.findLastIndex((x) => x.k === "op" && x.status === "req");
+        if (i >= 0) { events[i] = { ...events[i], status: "done", result: e.result }; setRes(cid, { events: [...events] }); }
+        await rsleep(T.done);
+      } else if (e.kind === "answer") { push({ k: "answer", answer: e }); }
+    };
+
+    try {
+      const out = await window.RenderAgent.run(cid, {
+        store: window.SIGNAL_STORE, corpus: window.CORPUS,
+        callModel: (args) => window.RenderAPI.callModel(args, { onRetry: (a) => setNote(`재시도 ${a}회…`) }),
+        onStep, system: window.RenderAgent.RENDER_SYS,
+      });
+      setNote(null);
+      setRes(cid, { status: "done", answer: out.answer, trace: out.trace });
+    } catch (e) {
+      setRes(cid, { status: "done", answer: { description: "실행 오류: " + (e.message || e), confidence: "LOW", evidence: [], conflicts: [], route_to_human: { needed: false } }, error: true });
+      setNote(null);
+    }
+  }
+
+  async function runAll() {
+    abortRef.current = false; followRef.current = true; setBusy(true);
+    for (const cid of allCols) {
+      if (abortRef.current) break;
+      const ex = results[cid];
+      if (ex && ex.status === "done") continue;
+      await runOne(cid, false);
+    }
+    followRef.current = true; setBusy(false);
+  }
+
+  // ---- 스냅샷 ----
+  function saveSnapshot() {
+    const snap = { version: 1, kind: "render", model: window.RenderAPI.getModel(), created: new Date().toISOString(),
+      results: Object.fromEntries(allCols.filter((c) => results[c] && results[c].trace)
+        .map((c) => [c, { trace: results[c].trace, answer: results[c].answer }])) };
+    const blob = new Blob([JSON.stringify(snap)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "render-snapshot.json"; a.click();
+  }
+  function applySnapshot(snap, silent) {
+    // 두 포맷 허용: {version,results:{cid:{trace,answer}}} | {cid:{trace}}(구)
+    const res = snap && snap.results ? snap.results : snap;
+    if (!res || typeof res !== "object") throw new Error("형식 불일치");
+    const loaded = {};
+    for (const [cid, r] of Object.entries(res)) {
+      const trace = r.trace || [];
+      loaded[cid] = { status: "done", events: traceToEvents(trace), trace, answer: r.answer || answerOf(trace) };
+    }
+    setResults(loaded);
+    if (!silent) {
+      const cnt = Object.keys(loaded).length;
+      const model = (snap && snap.model) || "기록";
+      const date = (snap && snap.created) ? snap.created.slice(0, 10) : "";
+      setNote(`스냅샷 로드 — ${cnt}컬럼 · ${model}${date ? " · " + date : ""}`);
+      setTimeout(() => setNote(null), 4000);
+    }
+  }
+  function loadFile(ev) {
+    const f = ev.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { try { applySnapshot(JSON.parse(rd.result)); } catch (e) { setNote("스냅샷 파일 오류: " + (e.message || e)); setTimeout(() => setNote(null), 4000); } };
+    rd.readAsText(f); ev.target.value = "";
+  }
+
+  // ---- 집계 ----
+  const answered = allCols.map((c) => results[c]).filter((r) => r && r.answer && r.status === "done");
+  const dist = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+  let digTotal = 0, humanTotal = 0;
+  answered.forEach((r) => { dist[r.answer.confidence] = (dist[r.answer.confidence] || 0) + 1;
+    digTotal += (r.trace || []).filter((s) => s.kind === "op" && TIER2.has(s.op)).length;
+    if (r.answer.route_to_human && r.answer.route_to_human.needed) humanTotal++; });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "390px 1fr", gap: 0, minHeight: "calc(100vh - 50px)" }}>
+      {/* 좌 */}
+      <div style={{ borderRight: "1px solid var(--rule)", padding: "18px 16px", overflowY: "auto" }}>
+        <div style={{ ...rmono, fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Render · 신호 증강</div>
+        <div style={{ fontSize: 14, color: "var(--dim)", marginBottom: 14, lineHeight: 1.5 }}>
+          부산물 신호(스키마·코드·데이터)만으로 컬럼 Description을 합성 — 라벨 권위를 검증 가능하게 근거 짓는가
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          <Btn on={!busy} color="var(--accent)" onClick={runAll}>전체 실행</Btn>
+          <Btn on={busy} color="var(--low)" onClick={() => (abortRef.current = true)}>중단</Btn>
+          <Btn on={answered.length > 0} color="var(--sig)" onClick={saveSnapshot}>스냅샷 저장</Btn>
+          <Btn on={!!window.RenderSnapshot} color="var(--sig)" onClick={() => { try { applySnapshot(window.RenderSnapshot); } catch (e) { setNote("스냅샷 로드 실패: " + (e.message || e)); } }}>스냅샷 불러오기</Btn>
+          <Btn on={true} color="var(--dim)" onClick={() => fileRef.current.click()}>파일 열기</Btn>
+          <input ref={fileRef} type="file" accept="application/json,.json" onChange={loadFile} style={{ display: "none" }} />
+        </div>
+        {note && <div style={{ ...rmono, fontSize: 13.5, color: "var(--med)", marginBottom: 8 }}>{note}</div>}
+        {!window.RenderAPI.hasKey() && <KeyBox />}
+        {answered.length > 0 && <Summary dist={dist} total={answered.length} dig={digTotal} human={humanTotal} />}
+
+        {groups.map((g) => (
+          <div key={g.table} style={{ marginTop: 14 }}>
+            <div style={{ ...rmono, fontSize: 12.5, letterSpacing: "0.06em", color: "var(--dim)", marginBottom: 5 }}>
+              {g.label} · <span style={{ opacity: 0.6 }}>{g.table}</span>
+            </div>
+            {g.cols.map((cid) => (
+              <ColumnRow key={cid} cid={cid} r={results[cid]} active={active === cid} busy={busy}
+                onView={() => { if (cid !== runningRef.current) followRef.current = false; setActive(cid); }}
+                onRun={() => { if (!busy) runOne(cid, true); }} />))}
+          </div>
+        ))}
+      </div>
+
+      {/* 우 */}
+      <div style={{ display: "flex", overflow: "hidden" }}>
+        <div style={{ flex: "0 0 60%", padding: "20px 24px", overflowY: "auto", borderRight: "1px solid var(--rule)" }}>
+          {!active && <Center>컬럼을 클릭하면 단건 실행(라이브). 전체 실행은 좌측 버튼. 키 없이 보려면 '스냅샷 불러오기'.</Center>}
+          {busy && !followRef.current && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "7px 12px",
+              background: "rgba(106,169,224,0.09)", border: "1px solid var(--sig)44", borderRadius: 5 }}>
+              <span style={{ ...rmono, fontSize: 13, color: "var(--sig)" }}>진행 추적 멈춤 — 완료 컬럼 보는 중</span>
+              <span onClick={() => { followRef.current = true; if (runningRef.current) setActive(runningRef.current); }}
+                style={{ ...rmono, fontSize: 13, color: "var(--accent)", border: "1px solid var(--accent)66", borderRadius: 4, padding: "2px 9px", cursor: "pointer" }}>최신으로 따라가기</span>
+            </div>)}
+          {active && <Thread cid={active} r={results[active]} />}
+        </div>
+        <div style={{ flex: "0 0 40%", padding: "20px 22px", overflowY: "auto", background: "rgba(0,0,0,0.14)" }}>
+          {!active && <Center style={{ fontSize: 15 }}>컬럼을 선택하면 신호·검증 포인트가 표시됩니다.</Center>}
+          {active && <ColumnDetail cid={active} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- 트레이스 스레드 ----
+function Thread({ cid, r }) {
+  if (!r) return null;
+  const a = window.RenderMeta.arch(cid);
+  return (
+    <div style={{ maxWidth: 820 }}>
+      <div style={{ ...rmono, fontSize: 13, color: "var(--dim)" }}>{cid}</div>
+      <div style={{ fontSize: 17, fontWeight: 600, margin: "6px 0 4px", ...rmono }}>{cid.split(".").pop()}
+        <span style={{ fontSize: 13, color: a.color, marginLeft: 10, fontWeight: 400 }}>{a.marker} · {a.expect}</span></div>
+      <div style={{ marginTop: 14 }}>{(r.events || []).map((e, i) => <REvent key={i} e={e} />)}</div>
+      {r.status === "running" && <div style={{ ...rmono, fontSize: 14, color: "var(--sig)" }}>실행 중…</div>}
+    </div>
+  );
+}
+
+function REvent({ e }) {
+  if (e.k === "think")
+    return <div style={{ borderLeft: "2px solid var(--med)", padding: "4px 12px", margin: "10px 0", fontSize: 14.5, color: "var(--muted, var(--dim))", fontStyle: "italic" }}>{e.text}</div>;
+  if (e.k === "op") {
+    const t2 = TIER2.has(e.op);
+    return (
+      <div style={{ border: "1px solid var(--rule)", borderLeft: `2px solid ${t2 ? "var(--sig)" : "var(--dim)"}`, borderRadius: 5, padding: "9px 13px", margin: "10px 0", background: "rgba(0,0,0,0.22)" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+          <span style={{ ...rmono, fontSize: 10, color: t2 ? "var(--sig)" : "var(--dim)", border: `1px solid ${t2 ? "var(--sig)" : "var(--dim)"}66`, borderRadius: 8, padding: "0 6px", textTransform: "uppercase" }}>{t2 ? "dig" : "peek"}</span>
+          <span style={{ ...rmono, fontSize: 14.5, color: t2 ? "var(--sig)" : "var(--text)", fontWeight: 600 }}>{e.op}</span>
+          <span style={{ ...rmono, fontSize: 13, color: "var(--dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.args && Object.keys(e.args).length ? JSON.stringify(e.args) : ""}</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ ...rmono, fontSize: 12, color: e.status === "done" ? "var(--high)" : "var(--med)" }}>{e.status === "done" ? "조회 완료" : "요청 중…"}</span>
+        </div>
+        {e.result && <pre style={{ ...rmono, fontSize: 12.5, color: "var(--text)", whiteSpace: "pre-wrap", margin: "8px 0 0", maxHeight: 150, overflowY: "auto", opacity: 0.82 }}>{JSON.stringify(e.result, null, 1).slice(0, 1100)}</pre>}
+      </div>);
+  }
+  if (e.k === "answer") return <AnswerCard a={e.answer} />;
+  return null;
+}
+
+function AnswerCard({ a }) {
+  if (!a) return null;
+  const c = CONFC[a.confidence] || "var(--dim)";
+  return (
+    <div style={{ border: `1px solid ${c}66`, borderLeft: `3px solid ${c}`, borderRadius: 6, padding: "13px 16px", margin: "16px 0 8px", background: "rgba(0,0,0,0.18)" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 9 }}>
+        <span style={{ ...rmono, fontSize: 11, fontWeight: 700, color: "#0c0e11", background: c, borderRadius: 7, padding: "2px 10px", letterSpacing: "0.04em" }}>{a.confidence}</span>
+        {a.route_to_human && a.route_to_human.needed &&
+          <span style={{ fontSize: 12.5, color: "var(--low)", fontWeight: 500 }}>사람 확인 필요 — {a.route_to_human.reason}</span>}
+      </div>
+      <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text)" }}>{a.description}</div>
+      {(a.evidence || []).length > 0 &&
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
+          {a.evidence.map((ev, i) => <span key={i} style={{ ...rmono, fontSize: 11, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 5, padding: "1px 7px", background: "rgba(0,0,0,0.25)" }}>{ev}</span>)}
+        </div>}
+      {(a.conflicts || []).map((cf, i) => (
+        <div key={i} style={{ fontSize: 12.5, color: "var(--text)", background: "rgba(224,107,94,0.10)", border: "1px solid rgba(224,107,94,0.32)", borderRadius: 5, padding: "7px 10px", marginTop: 8 }}>
+          <span style={{ ...rmono, fontSize: 11, color: "var(--low)", marginRight: 6 }}>{cf.type}</span>{cf.detail}</div>))}
+    </div>
+  );
+}
+
+// ---- 컬럼 상세 (우 40%) ----
+function ColumnDetail({ cid }) {
+  const r = window.SIGNAL_STORE.columns[cid];
+  const a = window.RenderMeta.arch(cid);
+  const s = r.schema;
+  const man = window.RenderMeta.manifest(cid);
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", gap: 8, ...rmono, fontSize: 13, padding: "2px 0" }}>
+      <span style={{ width: 76, color: "var(--dim)", flexShrink: 0 }}>{k}</span><span style={{ color: "var(--text)" }}>{v}</span></div>);
+  return (
+    <div>
+      <div style={{ ...rmono, fontSize: 15, fontWeight: 600 }}>{cid.split(".").pop()}</div>
+      <div style={{ display: "inline-block", ...rmono, fontSize: 11.5, color: a.color, border: `1px solid ${a.color}55`, borderRadius: 3, padding: "1px 7px", margin: "8px 0 12px" }}>{a.marker} · {a.expect}</div>
+      <div style={{ fontSize: 13.5, color: "var(--muted, var(--dim))", lineHeight: 1.6, marginBottom: 16 }}>{a.tip}</div>
+
+      <DSection title="스키마 (NL이 이미 보는 것)">
+        <Row k="table" v={s.table} /><Row k="type" v={s.type} /><Row k="nullable" v={String(s.nullable)} />
+        <Row k="pk" v={String(s.pk)} /><Row k="fk" v={s.fk || "—"} />
+      </DSection>
+
+      <DSection title={`매니페스트 · tier-1 신호 (${man.join(", ")})`}>
+        {r.orm && r.orm.present && <Row k="orm.field" v={r.orm.field} />}
+        {r.orm && r.orm.present && <Row k="orm.enum" v={r.orm.enum ? JSON.stringify(r.orm.enum) : "없음 → tier-2 필요"} />}
+        {r.orm && r.orm.present && (r.orm.annotations || []).length > 0 && <Row k="ann" v={r.orm.annotations.join(", ")} />}
+        {r.profile && r.profile.present && <Row k="distinct" v={(r.profile.distinct_sample || []).join(" · ")} />}
+        {r.profile && r.profile.present && <Row k="format" v={r.profile.inferred_format || "—"} />}
+        {r.profile && r.profile.present && <Row k="null율" v={r.profile.null_rate} />}
+        {r.reftable && <Row k="reftable" v={r.reftable.present ? "연결 선언됨" : "연결 미선언"} />}
+      </DSection>
+      <div style={{ ...rmono, fontSize: 12, color: "var(--dim)", marginTop: 14, lineHeight: 1.6 }}>
+        tier-2(코드 dig)는 정적 신호로 라벨·계보·연결이 안 풀릴 때만. 코드 원문은 '데이터·코드 탐색' 탭에서.
+      </div>
+    </div>
+  );
+}
+function DSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ ...rmono, fontSize: 12, letterSpacing: "0.05em", color: "var(--dim)", marginBottom: 5, borderBottom: "1px solid var(--rule)", paddingBottom: 4 }}>{title}</div>
+      {children}
+    </div>);
+}
+
+function Summary({ dist, total, dig, human }) {
+  return (
+    <div style={{ border: "1px solid var(--rule)", borderRadius: 5, padding: "10px 12px", marginTop: 6 }}>
+      <div style={{ ...rmono, fontSize: 12.5, letterSpacing: "0.06em", color: "var(--dim)", marginBottom: 7 }}>요약 · {total}컬럼</div>
+      <div style={{ display: "flex", gap: 12, ...rmono, fontSize: 14, alignItems: "baseline", flexWrap: "wrap" }}>
+        <span style={{ color: "var(--high)" }}>HIGH {dist.HIGH}</span>
+        <span style={{ color: "var(--med)" }}>MED {dist.MEDIUM}</span>
+        <span style={{ color: "var(--low)" }}>LOW {dist.LOW}</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ color: "var(--sig)" }}>dig {dig}</span>
+        <span style={{ color: "var(--low)" }}>사람 {human}</span>
+      </div>
+    </div>);
+}
+
+function KeyBox() {
+  const [k, setK] = rUseState("");
+  return (
+    <div style={{ border: "1px dashed var(--rule)", borderRadius: 5, padding: "8px 10px", marginBottom: 10 }}>
+      <div style={{ fontSize: 13.5, color: "var(--muted, var(--dim))", marginBottom: 5 }}>라이브 실행하려면 Anthropic 키 입력 (localStorage 저장 · 리포엔 안 남음). 키 없이도 '스냅샷 불러오기'로 기록 재생 가능.</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input value={k} onChange={(e) => setK(e.target.value)} placeholder="sk-ant-…" type="password"
+          style={{ ...rmono, flex: 1, fontSize: 14, background: "rgba(0,0,0,0.3)", border: "1px solid var(--rule)", borderRadius: 4, color: "var(--text)", padding: "4px 8px" }} />
+        <Btn on={k.length > 10} color="var(--accent)" onClick={() => { localStorage.setItem("anthropic_key", k); location.reload(); }}>저장</Btn>
+      </div>
+    </div>);
+}
+function Btn({ on, color, onClick, children }) {
+  return (
+    <button onClick={on ? onClick : undefined} style={{ ...rmono, fontSize: 14, padding: "5px 12px", borderRadius: 4,
+      cursor: on ? "pointer" : "default", opacity: on ? 1 : 0.4, border: `1px solid ${color}66`, background: color + "18", color }}>{children}</button>);
+}
+function Center({ children, style }) {
+  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "55vh", color: "var(--muted, var(--dim))", fontSize: 15, textAlign: "center", padding: 20, lineHeight: 1.6, ...style }}>{children}</div>;
+}
+
+window.RenderScreen = RenderScreen;

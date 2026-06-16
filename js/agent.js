@@ -150,7 +150,8 @@ function userPrompt(store, cid, log, left) {
 
 // ── 루프 ─────────────────────────────────────────────────────────────────────
 // callModel({system, user}) → 모델의 원문 텍스트(JSON 하나). 주입식.
-async function run(cid, { store, corpus, callModel, onStep }) {
+async function run(cid, { store, corpus, callModel, onStep, system }) {
+  const sys = system || RENDER_SYS;
   const tools = makeTools(store, corpus);
   const log = [];
   const seen = new Set();
@@ -159,26 +160,28 @@ async function run(cid, { store, corpus, callModel, onStep }) {
   for (let t = 0; t < MAX_OPS; t++) {
     const left = MAX_OPS - t;
     const user = userPrompt(store, cid, log, left);
-    const raw = await callModel({ system: RENDER_SYS, user });
+    const raw = await callModel({ system: sys, user });
     let action;
     try {
       action = JSON.parse(stripFences(raw));
     } catch (e) {
       // 파싱 실패 → 한 번 더 기회를 주되 기록
       trace.push({ kind: "parse_error", raw });
-      if (onStep) onStep({ kind: "parse_error", raw });
+      if (onStep) await onStep({ kind: "parse_error", raw });
       continue;
     }
 
     if (action.action === "answer") {
       trace.push({ kind: "answer", ...action });
-      if (onStep) onStep({ kind: "answer", ...action });
+      if (onStep) await onStep({ kind: "answer", ...action });
       return { cid, answer: action, trace, ops: log.length };
     }
 
     if (action.action === "op") {
       const op = action.op;
       const args = action.args || {};
+      if (action.thinking && onStep) await onStep({ kind: "think", text: action.thinking });
+      if (onStep) await onStep({ kind: "op_request", op, args });
       const key = op + ":" + JSON.stringify(args);
       let result;
       if (seen.has(key)) {
@@ -190,30 +193,30 @@ async function run(cid, { store, corpus, callModel, onStep }) {
       log.push({ op, args, result });
       const step = { kind: "op", op, args, thinking: action.thinking, result };
       trace.push(step);
-      if (onStep) onStep(step);
+      if (onStep) await onStep({ kind: "op_done", op, args, result });
       continue;
     }
 
     // 알 수 없는 액션 → 기록 후 계속
     trace.push({ kind: "unknown", action });
-    if (onStep) onStep({ kind: "unknown", action });
+    if (onStep) await onStep({ kind: "unknown", action });
   }
 
   // 상한 도달 — 강제 종결 신호를 마지막 한 번 더 요청
   const user = userPrompt(store, cid, log, 0);
-  const raw = await callModel({ system: RENDER_SYS, user });
+  const raw = await callModel({ system: sys, user });
   let action;
   try { action = JSON.parse(stripFences(raw)); } catch (e) { action = null; }
   if (action && action.action === "answer") {
     trace.push({ kind: "answer", ...action });
-    if (onStep) onStep({ kind: "answer", ...action });
+    if (onStep) await onStep({ kind: "answer", ...action });
     return { cid, answer: action, trace, ops: log.length };
   }
   const forced = { action: "answer", description: "신호 소진, 권위 미확인.",
     confidence: "LOW", evidence: log.map((l) => l.op), conflicts: [],
     route_to_human: { needed: true, reason: "상한 도달·미해소" }, thinking: "강제 종결" };
   trace.push({ kind: "answer", ...forced, forced: true });
-  if (onStep) onStep({ kind: "answer", ...forced, forced: true });
+  if (onStep) await onStep({ kind: "answer", ...forced, forced: true });
   return { cid, answer: forced, trace, ops: log.length, forced: true };
 }
 

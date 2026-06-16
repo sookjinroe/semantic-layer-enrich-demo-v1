@@ -1,55 +1,73 @@
 // ============================================================
-// live-api.js — 브라우저에서 Anthropic API 직접 호출 (Render 라이브 모드).
-//   키 해석: window.ANTHROPIC_KEY(local-config, gitignore) → localStorage(⚙ 입력).
-//   브라우저 직접 호출 헤더 사용. callModel({system,user}) → 모델 텍스트.
+// live-api.js — 모델 호출 래퍼 (NL2SQL-Agent 인터페이스 정렬).
+//   callModel({system,user}, {onRetry}) → 모델 원문 텍스트 (agent.js 가 파싱).
+//   키 해석: window.ANTHROPIC_KEY(.env/local-config, gitignore) → localStorage 'anthropic_key'.
+//   키는 리포에 절대 커밋 금지 — public 리포의 키는 시크릿 스캐닝으로 자동 비활성화됨.
+//   모델: getModel/setModel, localStorage 'render_model'.
 //   window.RenderAPI 로 노출.
 // ============================================================
 window.RenderAPI = (function () {
+  const ENV_READY = (async () => {
+    try {
+      const r = await fetch(".env", { cache: "no-store" });
+      if (r.ok) {
+        const t = await r.text();
+        const m = t.match(/^\s*ANTHROPIC_API_KEY\s*=\s*["']?(sk-ant-[A-Za-z0-9_\-]+)/m);
+        if (m && !window.ANTHROPIC_KEY) window.ANTHROPIC_KEY = m[1];
+      }
+    } catch (e) {}
+  })();
+
   const MODELS = [
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
-    { id: "claude-opus-4-8", label: "Opus 4.8" },
+    { id: "claude-haiku-4-5",  label: "Haiku 4.5 · 빠름/저렴" },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6 · 기본" },
+    { id: "claude-opus-4-8",   label: "Opus 4.8 · 고성능" },
+    { id: "claude-fable-5",    label: "Fable 5 · 최상위" },
   ];
+  const DEFAULT_MODEL = "claude-sonnet-4-6";
 
-  function getKey() {
-    if (window.ANTHROPIC_KEY) return window.ANTHROPIC_KEY;
-    try { return localStorage.getItem("render_key") || ""; } catch (e) { return ""; }
-  }
-  function setKey(k) { try { localStorage.setItem("render_key", k); } catch (e) {} }
   function getModel() {
-    try { return localStorage.getItem("render_model") || MODELS[0].id; } catch (e) { return MODELS[0].id; }
+    const m = localStorage.getItem("render_model");
+    return MODELS.some((x) => x.id === m) ? m : DEFAULT_MODEL;
   }
-  function setModel(m) { try { localStorage.setItem("render_model", m); } catch (e) {} }
+  function setModel(id) { localStorage.setItem("render_model", id); }
+  function getKey() {
+    return (typeof window !== "undefined" && window.ANTHROPIC_KEY) ||
+           localStorage.getItem("anthropic_key") || null;
+  }
+  function hasKey() { return !!getKey(); }
 
-  // 아티팩트 런타임은 키리스(런타임 주입). Pages 는 사용자 키 필요.
-  async function callModel({ system, user }) {
+  // agent.js 와 계약: 원문 텍스트 반환(파싱은 agent.js). 3회 지수 백오프.
+  async function callModel({ system, user }, opts) {
+    await ENV_READY;
+    const { onRetry } = opts || {};
+    const headers = { "Content-Type": "application/json" };
     const key = getKey();
-    const headers = {
-      "content-type": "application/json",
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    };
-    if (key) headers["x-api-key"] = key;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: getModel(),
-        max_tokens: 1024,
-        system,
-        messages: [{ role: "user", content: user }],
-      }),
-    });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(`API ${res.status}: ${t.slice(0, 200)}`);
+    if (key) {
+      headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+      headers["anthropic-dangerous-direct-browser-access"] = "true";
     }
-    const data = await res.json();
-    return (data.content || [])
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: getModel(), max_tokens: 1024,
+            system, messages: [{ role: "user", content: user }] }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      } catch (e) {
+        lastErr = e;
+        const delay = 800 * Math.pow(2, attempt - 1);
+        if (onRetry) onRetry(attempt, delay, e);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    throw lastErr;
   }
 
-  return { MODELS, getKey, setKey, getModel, setModel, callModel };
+  return { callModel, MODELS, getModel, setModel, getKey, hasKey, ready: ENV_READY };
 })();

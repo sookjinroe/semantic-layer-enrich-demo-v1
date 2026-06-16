@@ -3,3 +3,8 @@ local-config.js
 node_modules/
 package-lock.json
 data/_summary.json
+
+# experiment scratch
+data/_exp_*.json
+data/_experiment.json
+data/_summary.json
