@@ -2,3 +2,4 @@ local-config.js
 .env
 node_modules/
 package-lock.json
+data/_summary.json
