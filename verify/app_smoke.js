@@ -4,6 +4,7 @@ const fs = require("fs"), path = require("path");
 const dom = new JSDOM('<!DOCTYPE html><div id="root"></div>', { url: "http://localhost/" });
 global.window = dom.window; global.document = dom.window.document; global.navigator = dom.window.navigator;
 global.location = dom.window.location; global.history = dom.window.history;
+global.localStorage = dom.window.localStorage;
 global.React = require("react"); global.ReactDOM = require("react-dom/client");
 const ROOT = path.join(__dirname, "..");
 // 번들
@@ -13,6 +14,7 @@ evalFile("data/corpus-index.js");         // window.CORPUS
 evalFile("data/render-snapshot-data.js"); // window.RenderSnapshot
 evalFile("js/render-meta.js");            // window.RenderMeta
 global.window.RenderAgent = require(path.join(ROOT, "js/agent.js"));
+evalFile("js/prompts.js");                 // window.RenderPrompts (needs RenderAgent)
 global.window.RenderAPI = { hasKey: () => false, getKey: () => null, getModel: () => "claude-sonnet-4-6",
   setModel: () => {}, MODELS: [{ id: "claude-sonnet-4-6", label: "S" }], callModel: async () => "{}", ready: Promise.resolve() };
 function evalJsx(p) { const code = babel.transformFileSync(path.join(ROOT, p), { presets: [require("@babel/preset-react")] }).code; eval(code); }
@@ -26,6 +28,8 @@ setTimeout(() => {
   a("탭: 에이전트", /에이전트/.test(txt()));
   a("탭: 데이터·코드 탐색", /데이터 · 코드 탐색/.test(txt()));
   a("모델 셀렉트", !!d.querySelector("select"));
+  a("프롬프트 셀렉트(2개 select)", d.querySelectorAll("select").length >= 2);
+  a("프롬프트 3종 노출", /절충형/.test(txt()) && /서술형/.test(txt()) && /압축형/.test(txt()));
   // 2) 컬럼 목록
   a("테이블 그룹(대출 신청이력)", /대출 신청이력/.test(txt()));
   a("컬럼 LOAN_STAT_CD", /LOAN_STAT_CD/.test(txt()));

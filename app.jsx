@@ -9,6 +9,7 @@ const { useState: aUseState } = React;
 function AppShell() {
   const [tab, setTab] = aUseState("agent");
   const [model, setModelState] = aUseState(window.RenderAPI.getModel());
+  const [prompt, setPromptState] = aUseState(window.RenderPrompts.getSelectedId());
   const tabs = [["agent", "에이전트"], ["explorer", "데이터 · 코드 탐색"]];
   return (
     <div>
@@ -22,6 +23,12 @@ function AppShell() {
               color: tab === k ? "var(--text)" : "var(--dim)",
               borderBottom: tab === k ? "2px solid var(--accent)" : "2px solid transparent" }}>{label}</div>))}
         <div style={{ flex: 1 }} />
+        <select value={prompt} onChange={(e) => { window.RenderPrompts.setSelectedId(e.target.value); setPromptState(e.target.value); }}
+          title="시스템 프롬프트 — 실행에 쓰일 작성 방식"
+          style={{ fontFamily: "var(--mono)", fontSize: 13.5, background: "rgba(0,0,0,0.3)", color: "var(--text)",
+            border: "1px solid var(--rule)", borderRadius: 4, padding: "4px 8px", marginBottom: 7, marginRight: 8, maxWidth: 230 }}>
+          {window.RenderPrompts.LIST.map((p) => <option key={p.id} value={p.id}>프롬프트: {p.label}</option>)}
+        </select>
         <select value={model} onChange={(e) => { window.RenderAPI.setModel(e.target.value); setModelState(e.target.value); }}
           style={{ fontFamily: "var(--mono)", fontSize: 13.5, background: "rgba(0,0,0,0.3)", color: "var(--text)",
             border: "1px solid var(--rule)", borderRadius: 4, padding: "4px 8px", marginBottom: 7 }}>

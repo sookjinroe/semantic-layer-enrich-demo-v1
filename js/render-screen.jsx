@@ -122,7 +122,7 @@ function RenderScreen() {
       const out = await window.RenderAgent.run(cid, {
         store: window.SIGNAL_STORE, corpus: window.CORPUS,
         callModel: (args) => window.RenderAPI.callModel(args, { onRetry: (a) => setNote(`재시도 ${a}회…`) }),
-        onStep, system: window.RenderAgent.RENDER_SYS,
+        onStep, system: window.RenderPrompts.current(),
       });
       setNote(null);
       setRes(cid, { status: "done", answer: out.answer, trace: out.trace });
@@ -145,7 +145,8 @@ function RenderScreen() {
 
   // ---- 스냅샷 ----
   function saveSnapshot() {
-    const snap = { version: 1, kind: "render", model: window.RenderAPI.getModel(), created: new Date().toISOString(),
+    const snap = { version: 1, kind: "render", model: window.RenderAPI.getModel(),
+      prompt_id: window.RenderPrompts.getSelectedId(), created: new Date().toISOString(),
       results: Object.fromEntries(allCols.filter((c) => results[c] && results[c].trace)
         .map((c) => [c, { trace: results[c].trace, answer: results[c].answer }])) };
     const blob = new Blob([JSON.stringify(snap)], { type: "application/json" });
@@ -165,7 +166,8 @@ function RenderScreen() {
       const cnt = Object.keys(loaded).length;
       const model = (snap && snap.model) || "기록";
       const date = (snap && snap.created) ? snap.created.slice(0, 10) : "";
-      setNote(`스냅샷 로드 — ${cnt}컬럼 · ${model}${date ? " · " + date : ""}`);
+      const pl = (snap && snap.prompt_id && window.RenderPrompts) ? " · " + window.RenderPrompts.get(snap.prompt_id).label.split(" ·")[0] : "";
+      setNote(`스냅샷 로드 — ${cnt}컬럼 · ${model}${pl}${date ? " · " + date : ""}`);
       setTimeout(() => setNote(null), 4000);
     }
   }
