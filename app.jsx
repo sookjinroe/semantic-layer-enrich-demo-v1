@@ -7,10 +7,10 @@
 
 const { useState: aUseState } = React;
 function AppShell() {
-  const [tab, setTab] = aUseState("agent");
+  const [tab, setTab] = aUseState("intro");
   const [model, setModelState] = aUseState(window.RenderAPI.getModel());
   const [prompt, setPromptState] = aUseState(window.RenderPrompts.getSelectedId());
-  const tabs = [["agent", "에이전트"], ["explorer", "데이터 · 코드 탐색"]];
+  const tabs = [["intro", "소개"], ["agent", "에이전트"], ["explorer", "데이터 · 코드 탐색"]];
   return (
     <div>
       <div style={{ display: "flex", gap: 4, padding: "10px 16px 0", borderBottom: "1px solid var(--rule)", alignItems: "flex-end" }}>
@@ -36,6 +36,7 @@ function AppShell() {
         </select>
         <div style={{ fontFamily: "var(--mono)", fontSize: 12.5, color: "var(--dim)", paddingBottom: 10, marginLeft: 12 }}>corpus-v1</div>
       </div>
+      {tab === "intro" && <window.RenderIntro />}
       <div style={{ display: tab === "agent" ? "block" : "none" }}><window.RenderScreen /></div>
       {tab === "explorer" && <window.RenderExplorer />}
     </div>
