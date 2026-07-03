@@ -349,10 +349,14 @@ function AnswerCardV3({ a }) {
     : [ ...(a.conflicts || []).map((cf) => cf.detail),
         (a.route_to_human && a.route_to_human.reason) || "" ].filter(Boolean).join(" ");
 
+  // 표준 표기(dimension_categorical/dimension_time)와 구 표기(categorical_dimension/time_dimension)를
+  // 모두 받아 렌더한다. 이전 스냅샷 두 개가 구 표기로 저장돼 있어 하위호환 필요.
   const CAP_COLOR = {
     entity:                "var(--sig)",
-    categorical_dimension: "var(--accent)",
-    time_dimension:        "var(--med)",
+    dimension_categorical: "var(--accent)",
+    dimension_time:        "var(--med)",
+    categorical_dimension: "var(--accent)",  // 구 표기
+    time_dimension:        "var(--med)",     // 구 표기
     measure:               "var(--high)",
   };
   const capColor = (cap.primary && CAP_COLOR[cap.primary]) || "var(--dim)";
