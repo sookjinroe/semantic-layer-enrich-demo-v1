@@ -323,10 +323,11 @@ function AnswerCardV2({ a }) {
   );
 }
 
-// ── v3 뷰 — description + capability/codedict/format/aggregation 슬롯 ──
-//   v3 뷰에서는 capability 슬롯이 항상 렌더된다(primary null 이면 "미분류"로 명시).
-//   capability.primary 가 확정된 경우, 관련 없는 슬롯(예: entity 컬럼의 aggregation)
-//   은 자연스럽게 비어 있어 렌더 안 됨.
+// ── v3 뷰 — description + 구조화 슬롯 + review_note ──
+//   스키마: capability{primary,alternatives} · codedict · format ·
+//           aggregation{additive,suggested} · confidence · review_note · needs_review
+//   구 스키마(reasoning·evidence·conflicts·route_to_human) 필드가 스냅샷에 남아
+//   있어도 조용히 무시하고 렌더 가능한 것만 그린다 (하위호환).
 function AnswerCardV3({ a }) {
   if (!a) return null;
   const c = CONFC[a.confidence] || "var(--dim)";
@@ -336,10 +337,17 @@ function AnswerCardV3({ a }) {
   const format = a.format;
   const agg = a.aggregation || {};
 
-  // v3 뷰: capability 는 항상 렌더 (미분류 명시). 나머지 슬롯은 값 있을 때만.
   const hasCodedict = codedict.length > 0;
   const hasFormat = !!format;
-  const hasAgg = !!(agg.additive || (agg.suggested && agg.suggested.length > 0) || (agg.observed_in_etl && agg.observed_in_etl.length > 0) || agg.reasoning);
+  const hasAgg = !!(agg.additive || (agg.suggested && agg.suggested.length > 0));
+
+  // 신구 스키마 겸용: needs_review(신) 없으면 route_to_human.needed(구)로.
+  const needsReview = a.needs_review != null ? !!a.needs_review
+    : !!(a.route_to_human && a.route_to_human.needed);
+  // review_note(신) 없으면 구 필드에서 합성.
+  const reviewNote = a.review_note != null ? a.review_note
+    : [ ...(a.conflicts || []).map((cf) => cf.detail),
+        (a.route_to_human && a.route_to_human.reason) || "" ].filter(Boolean).join(" ");
 
   const CAP_COLOR = {
     entity:                "var(--sig)",
@@ -354,33 +362,30 @@ function AnswerCardV3({ a }) {
     <div className="answer" style={{ border: `1px solid ${c}66`, borderLeft: `3px solid ${c}`, borderRadius: 6, padding: "13px 16px", margin: "16px 0 8px", background: "rgba(0,0,0,0.18)" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 9 }}>
         <span className="conf" style={{ ...rmono, fontSize: 11, fontWeight: 700, color: "#0c0e11", background: c, borderRadius: 7, padding: "2px 10px", letterSpacing: "0.04em" }}>{a.confidence}</span>
-        {a.route_to_human && a.route_to_human.needed &&
-          <span style={{ fontSize: 12.5, color: "var(--low)", fontWeight: 500 }}>사람 확인 필요 — {a.route_to_human.reason}</span>}
+        {needsReview &&
+          <span style={{ ...rmono, fontSize: 11, fontWeight: 600, color: "#0c0e11", background: "var(--low)", borderRadius: 7, padding: "2px 10px" }}>검수 필요</span>}
       </div>
 
-      {/* description */}
+      {/* description — 검수 대상 1 */}
       <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text)" }}>{a.description}</div>
 
       {/* 구조화 슬롯 영역 */}
       <div style={{ marginTop: 13, paddingTop: 11, borderTop: "1px dashed var(--rule)", display: "flex", flexDirection: "column", gap: 9 }}>
 
         {/* capability — 항상 렌더 (미분류도 명시) */}
-        <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>capability</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              {cap.primary
-                ? <span style={{ ...rmono, fontSize: 12, fontWeight: 600, color: capColor, border: `1px solid ${capColor}66`, borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{cap.primary}</span>
-                : <span style={{ ...rmono, fontSize: 12, color: "var(--dim)", border: "1px dashed var(--rule)", borderRadius: 4, padding: "1px 8px" }}>미분류</span>}
-              {(cap.alternatives || []).map((alt, i) => (
-                <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 7px" }}>or {alt}</span>
-              ))}
-            </div>
-            {cap.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{cap.reasoning}</div>}
+        <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px" }}>capability</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            {cap.primary
+              ? <span style={{ ...rmono, fontSize: 12, fontWeight: 600, color: capColor, border: `1px solid ${capColor}66`, borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{cap.primary}</span>
+              : <span style={{ ...rmono, fontSize: 12, color: "var(--dim)", border: "1px dashed var(--rule)", borderRadius: 4, padding: "1px 8px" }}>미분류</span>}
+            {(cap.alternatives || []).map((alt, i) => (
+              <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 7px" }}>or {alt}</span>
+            ))}
           </div>
         </div>
 
-        {/* codedict */}
+        {/* codedict — 검수 대상 2 */}
         {hasCodedict && (
           <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
             <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>codedict</span>
@@ -405,38 +410,28 @@ function AnswerCardV3({ a }) {
 
         {/* aggregation */}
         {hasAgg && (
-          <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>aggregation</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                {agg.additive && <span style={{ ...rmono, fontSize: 12, color: "var(--high)", border: "1px solid var(--high)55", borderRadius: 4, padding: "1px 7px" }}>{ADD_LABEL[agg.additive] || agg.additive}</span>}
-                {(agg.suggested || []).map((fn, i) => (
-                  <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--sig)", border: "1px solid var(--sig)55", borderRadius: 4, padding: "1px 7px" }}>{fn}</span>
-                ))}
-              </div>
-              {(agg.observed_in_etl || []).length > 0 && (
-                <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 2 }}>
-                  {agg.observed_in_etl.map((s, i) => (
-                    <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--muted)" }}>↳ {s}</span>
-                  ))}
-                </div>
-              )}
-              {agg.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{agg.reasoning}</div>}
+          <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px" }}>aggregation</span>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {agg.additive && <span style={{ ...rmono, fontSize: 12, color: "var(--high)", border: "1px solid var(--high)55", borderRadius: 4, padding: "1px 7px" }}>{ADD_LABEL[agg.additive] || agg.additive}</span>}
+              {(agg.suggested || []).map((fn, i) => (
+                <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--sig)", border: "1px solid var(--sig)55", borderRadius: 4, padding: "1px 7px" }}>{fn}</span>
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* evidence */}
-      {(a.evidence || []).length > 0 &&
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
-          {a.evidence.map((ev, i) => <span key={i} style={{ ...rmono, fontSize: 11, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 5, padding: "1px 7px", background: "rgba(0,0,0,0.25)" }}>{ev}</span>)}
-        </div>}
-
-      {/* conflicts */}
-      {(a.conflicts || []).map((cf, i) => (
-        <div key={i} className="conflict" style={{ fontSize: 12.5, color: "var(--text)", background: "rgba(224,107,94,0.10)", border: "1px solid rgba(224,107,94,0.32)", borderRadius: 5, padding: "7px 10px", marginTop: 8 }}>
-          <span style={{ ...rmono, fontSize: 11, color: "var(--low)", marginRight: 6 }}>{cf.type}</span>{cf.detail}</div>))}
+      {/* review_note — 검수자용 한 단락. 비어 있으면 렌더 안 함 = 검수 부담 없음 */}
+      {reviewNote && (
+        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--text)",
+          background: needsReview ? "rgba(224,107,94,0.10)" : "rgba(106,169,224,0.08)",
+          border: `1px solid ${needsReview ? "rgba(224,107,94,0.32)" : "rgba(106,169,224,0.25)"}`,
+          borderRadius: 5, padding: "9px 12px", marginTop: 11 }}>
+          <span style={{ ...rmono, fontSize: 10.5, color: needsReview ? "var(--low)" : "var(--sig)", letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 4 }}>review note</span>
+          {reviewNote}
+        </div>
+      )}
     </div>
   );
 }

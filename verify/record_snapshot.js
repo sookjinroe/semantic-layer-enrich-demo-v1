@@ -73,18 +73,19 @@ async function callModel({ system, user }, cid) {
   }
 }
 
-// v3 슬롯 채움 — answer 에서 추출. v2 응답은 모두 false.
+// v3 슬롯 채움 — answer 에서 추출. v2 응답은 모두 false. 신구 스키마 겸용.
 function v3Filled(a) {
-  if (!a) return { cap: false, codedict: false, format: false, agg: false };
+  if (!a) return { cap: false, codedict: false, format: false, agg: false, note: false };
   const cap = a.capability;
   const codedict = a.codedict;
   const fmt = a.format;
   const agg = a.aggregation;
   return {
-    cap: !!(cap && (cap.primary || (cap.alternatives && cap.alternatives.length > 0) || cap.reasoning)),
+    cap: !!(cap && (cap.primary || (cap.alternatives && cap.alternatives.length > 0))),
     codedict: Array.isArray(codedict) && codedict.length > 0,
     format: !!fmt,
-    agg: !!(agg && (agg.additive || (agg.suggested && agg.suggested.length > 0) || (agg.observed_in_etl && agg.observed_in_etl.length > 0) || agg.reasoning)),
+    agg: !!(agg && (agg.additive || (agg.suggested && agg.suggested.length > 0))),
+    note: !!(a.review_note && a.review_note.trim()),
   };
 }
 
@@ -117,14 +118,15 @@ function v3Filled(a) {
         conf: a.confidence,
         ops: out.ops,
         dig: digOps,
-        human: !!(a.route_to_human && a.route_to_human.needed),
+        human: a.needs_review != null ? !!a.needs_review : !!(a.route_to_human && a.route_to_human.needed),
         conflicts: (a.conflicts || []).length,
         parse_errs: parseErrs,
         v3: filled,
         desc: a.description,
       });
-      const slot = [filled.cap?"C":"-", filled.codedict?"D":"-", filled.format?"F":"-", filled.agg?"A":"-"].join("");
-      console.log(`${a.confidence.padEnd(6)} ops=${out.ops} dig=${digOps} human=${a.route_to_human && a.route_to_human.needed ? "Y" : "-"} conflicts=${(a.conflicts||[]).length} v3=[${slot}] parse_err=${parseErrs}`);
+      const slot = [filled.cap?"C":"-", filled.codedict?"D":"-", filled.format?"F":"-", filled.agg?"A":"-", filled.note?"N":"-"].join("");
+      const needsRev = a.needs_review != null ? !!a.needs_review : !!(a.route_to_human && a.route_to_human.needed);
+      console.log(`${a.confidence.padEnd(6)} ops=${out.ops} dig=${digOps} review=${needsRev ? "Y" : "-"} v3=[${slot}] parse_err=${parseErrs}`);
     } catch (e) {
       console.log("ERROR " + e.message);
       summary.push({ cid, error: e.message });
@@ -156,13 +158,13 @@ function v3Filled(a) {
   console.log("\n=== 결과 요약 ===");
   for (const s of summary) {
     if (s.error) { console.log(`  ${s.cid.padEnd(34)} ERROR ${s.error}`); continue; }
-    const slot = [s.v3.cap?"C":"-", s.v3.codedict?"D":"-", s.v3.format?"F":"-", s.v3.agg?"A":"-"].join("");
-    console.log(`  ${s.cid.padEnd(34)} [${(s.arch||"-").padEnd(14)}] ${s.conf.padEnd(6)} ops=${s.ops} dig=${s.dig} human=${s.human?"Y":"-"} cf=${s.conflicts} v3=[${slot}]`);
+    const slot = [s.v3.cap?"C":"-", s.v3.codedict?"D":"-", s.v3.format?"F":"-", s.v3.agg?"A":"-", s.v3.note?"N":"-"].join("");
+    console.log(`  ${s.cid.padEnd(34)} [${(s.arch||"-").padEnd(14)}] ${s.conf.padEnd(6)} ops=${s.ops} dig=${s.dig} review=${s.human?"Y":"-"} v3=[${slot}]`);
   }
 
   // v3 슬롯 채움 분포 (v3 모드일 때만 의미)
   if (IS_V3) {
-    const filledCnt = { cap: 0, codedict: 0, format: 0, agg: 0 };
+    const filledCnt = { cap: 0, codedict: 0, format: 0, agg: 0, note: 0 };
     let answered = 0;
     for (const s of summary) {
       if (s.error || !s.v3) continue;
@@ -171,12 +173,14 @@ function v3Filled(a) {
       if (s.v3.codedict) filledCnt.codedict++;
       if (s.v3.format) filledCnt.format++;
       if (s.v3.agg) filledCnt.agg++;
+      if (s.v3.note) filledCnt.note++;
     }
     console.log("\n=== v3 슬롯 채움 (응답 받은 컬럼 기준) ===");
     console.log(`  capability  : ${filledCnt.cap}/${answered}`);
     console.log(`  codedict    : ${filledCnt.codedict}/${answered}`);
     console.log(`  format      : ${filledCnt.format}/${answered}`);
     console.log(`  aggregation : ${filledCnt.agg}/${answered}`);
+    console.log(`  review_note : ${filledCnt.note}/${answered}`);
   }
 
   // 가설-핵심 컬럼 디스크립션
