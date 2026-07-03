@@ -41,11 +41,14 @@ select option{background:#14171c;color:var(--text)}
 <script src="data/signal-store.js"></script>
 <script src="data/corpus-index.js"></script>
 <script src="data/render-snapshot-data.js"></script>
+<!-- v3 스냅샷은 옵셔널: 파일이 아직 없으면 조용히 무시 (v3 탭의 '스냅샷 불러오기'만 비활성) -->
+<script src="data/render-snapshot-data-v3.js" onerror="void 0"></script>
 
 <!-- 로직 -->
 <script src="js/render-meta.js"></script>
 <script src="js/agent.js"></script>
 <script src="js/prompts.js"></script>
+<script src="js/prompt-v3.js"></script>
 <script src="js/live-api.js"></script>
 
 <!-- UI (in-browser JSX) -->

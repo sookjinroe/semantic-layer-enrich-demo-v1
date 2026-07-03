@@ -4,7 +4,10 @@
 //   좌: 제어 + 요약 + 테이블별 컬럼 목록. 우: 트레이스(60%) + 컬럼 상세(40%).
 //   window.RenderScreen 으로 노출.
 // ============================================================
-const { useState: rUseState, useRef: rUseRef, useEffect: rUseEffect } = React;
+const { useState: rUseState, useRef: rUseRef, useEffect: rUseEffect, createContext: rCreateContext, useContext: rUseContext } = React;
+
+// Render 모드(v2/v3)를 트리 하위로 전파. AnswerCard 가 이 컨텍스트를 읽어 뷰를 결정.
+const RenderModeContext = rCreateContext("v2");
 
 const R_T = { live: { think: 360, req: 520, done: 460 }, batch: { think: 50, req: 70, done: 60 } };
 const CONFC = { HIGH: "var(--high)", MEDIUM: "var(--med)", LOW: "var(--low)" };
@@ -82,7 +85,17 @@ function ColumnRow({ cid, r, active, busy, onView, onRun }) {
     </div>);
 }
 
-function RenderScreen() {
+function RenderScreen({ mode }) {
+  // mode: "v2" | "v3". mode 는 트리 하위로 Context 로 전파된다.
+  const isV3 = mode === "v3";
+  const getSystemPrompt = () => isV3 ? window.RenderPromptV3.BALANCED : window.RenderPrompts.current();
+  const getPromptId     = () => isV3 ? "balanced_v3" : window.RenderPrompts.getSelectedId();
+  const getSnapshotSrc  = () => isV3 ? window.RenderSnapshotV3 : window.RenderSnapshot;
+  const snapshotFilename = isV3 ? "render-snapshot-v3.json" : "render-snapshot.json";
+  const headerTitle = isV3 ? "Render v3 · 구조화 슬롯" : "Render v2 · Description";
+  const headerSub   = isV3
+    ? "description + capability · codedict · format · aggregation 을 슬롯으로 저작 — NL2SQL 이 구조화된 슬롯을 그대로 참조"
+    : "부산물 신호(스키마·코드·데이터)만으로 컬럼 Description을 합성 — 라벨 권위를 검증 가능하게 근거 짓는가";
   const [results, setResults] = rUseState({});
   const [active, setActive] = rUseState(null);
   const [busy, setBusy] = rUseState(false);
@@ -122,7 +135,7 @@ function RenderScreen() {
       const out = await window.RenderAgent.run(cid, {
         store: window.SIGNAL_STORE, corpus: window.CORPUS,
         callModel: (args) => window.RenderAPI.callModel(args, { onRetry: (a) => setNote(`재시도 ${a}회…`) }),
-        onStep, system: window.RenderPrompts.current(),
+        onStep, system: getSystemPrompt(),
       });
       setNote(null);
       setRes(cid, { status: "done", answer: out.answer, trace: out.trace });
@@ -145,12 +158,12 @@ function RenderScreen() {
 
   // ---- 스냅샷 ----
   function saveSnapshot() {
-    const snap = { version: 1, kind: "render", model: window.RenderAPI.getModel(),
-      prompt_id: window.RenderPrompts.getSelectedId(), created: new Date().toISOString(),
+    const snap = { version: 1, kind: "render", mode, model: window.RenderAPI.getModel(),
+      prompt_id: getPromptId(), created: new Date().toISOString(),
       results: Object.fromEntries(allCols.filter((c) => results[c] && results[c].trace)
         .map((c) => [c, { trace: results[c].trace, answer: results[c].answer }])) };
     const blob = new Blob([JSON.stringify(snap)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "render-snapshot.json"; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = snapshotFilename; a.click();
   }
   function applySnapshot(snap, silent) {
     // 두 포맷 허용: {version,results:{cid:{trace,answer}}} | {cid:{trace}}(구)
@@ -166,7 +179,9 @@ function RenderScreen() {
       const cnt = Object.keys(loaded).length;
       const model = (snap && snap.model) || "기록";
       const date = (snap && snap.created) ? snap.created.slice(0, 10) : "";
-      const pl = (snap && snap.prompt_id && window.RenderPrompts) ? " · " + window.RenderPrompts.get(snap.prompt_id).label.split(" ·")[0] : "";
+      const pl = (snap && snap.prompt_id === "balanced_v3")
+        ? " · v3(구조화)"
+        : ((snap && snap.prompt_id && window.RenderPrompts) ? " · " + window.RenderPrompts.get(snap.prompt_id).label.split(" ·")[0] : "");
       setNote(`스냅샷 로드 — ${cnt}컬럼 · ${model}${pl}${date ? " · " + date : ""}`);
       setTimeout(() => setNote(null), 4000);
     }
@@ -187,18 +202,19 @@ function RenderScreen() {
     if (r.answer.route_to_human && r.answer.route_to_human.needed) humanTotal++; });
 
   return (
+    <RenderModeContext.Provider value={mode}>
     <div style={{ display: "grid", gridTemplateColumns: "390px 1fr", gap: 0, minHeight: "calc(100vh - 50px)" }}>
       {/* 좌 */}
       <div style={{ borderRight: "1px solid var(--rule)", padding: "18px 16px", overflowY: "auto" }}>
-        <div style={{ ...rmono, fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Render · 신호 증강</div>
+        <div style={{ ...rmono, fontSize: 18, fontWeight: 600, marginBottom: 4 }}>{headerTitle}</div>
         <div style={{ fontSize: 14, color: "var(--dim)", marginBottom: 14, lineHeight: 1.5 }}>
-          부산물 신호(스키마·코드·데이터)만으로 컬럼 Description을 합성 — 라벨 권위를 검증 가능하게 근거 짓는가
+          {headerSub}
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           <Btn on={!busy} color="var(--accent)" onClick={runAll}>전체 실행</Btn>
           <Btn on={busy} color="var(--low)" onClick={() => (abortRef.current = true)}>중단</Btn>
           <Btn on={answered.length > 0} color="var(--sig)" onClick={saveSnapshot}>스냅샷 저장</Btn>
-          <Btn on={!!window.RenderSnapshot} color="var(--sig)" onClick={() => { try { applySnapshot(window.RenderSnapshot); } catch (e) { setNote("스냅샷 로드 실패: " + (e.message || e)); } }}>스냅샷 불러오기</Btn>
+          <Btn on={!!getSnapshotSrc()} color="var(--sig)" onClick={() => { try { applySnapshot(getSnapshotSrc()); } catch (e) { setNote("스냅샷 로드 실패: " + (e.message || e)); } }}>스냅샷 불러오기</Btn>
           <Btn on={true} color="var(--dim)" onClick={() => fileRef.current.click()}>파일 열기</Btn>
           <input ref={fileRef} type="file" accept="application/json,.json" onChange={loadFile} style={{ display: "none" }} />
         </div>
@@ -238,6 +254,7 @@ function RenderScreen() {
         </div>
       </div>
     </div>
+    </RenderModeContext.Provider>
   );
 }
 
@@ -277,32 +294,60 @@ function REvent({ e }) {
   return null;
 }
 
+// AnswerCard 디스패처 — mode 에 따라 V2 / V3 뷰 선택.
 function AnswerCard({ a }) {
+  const mode = rUseContext(RenderModeContext);
+  return mode === "v3" ? <AnswerCardV3 a={a} /> : <AnswerCardV2 a={a} />;
+}
+
+// ── v2 뷰 — description·evidence·conflicts·route_to_human 만 ───────────
+function AnswerCardV2({ a }) {
+  if (!a) return null;
+  const c = CONFC[a.confidence] || "var(--dim)";
+  return (
+    <div className="answer" style={{ border: `1px solid ${c}66`, borderLeft: `3px solid ${c}`, borderRadius: 6, padding: "13px 16px", margin: "16px 0 8px", background: "rgba(0,0,0,0.18)" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 9 }}>
+        <span className="conf" style={{ ...rmono, fontSize: 11, fontWeight: 700, color: "#0c0e11", background: c, borderRadius: 7, padding: "2px 10px", letterSpacing: "0.04em" }}>{a.confidence}</span>
+        {a.route_to_human && a.route_to_human.needed &&
+          <span style={{ fontSize: 12.5, color: "var(--low)", fontWeight: 500 }}>사람 확인 필요 — {a.route_to_human.reason}</span>}
+      </div>
+      <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text)" }}>{a.description}</div>
+      {(a.evidence || []).length > 0 &&
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
+          {a.evidence.map((ev, i) => <span key={i} style={{ ...rmono, fontSize: 11, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 5, padding: "1px 7px", background: "rgba(0,0,0,0.25)" }}>{ev}</span>)}
+        </div>}
+      {(a.conflicts || []).map((cf, i) => (
+        <div key={i} className="conflict" style={{ fontSize: 12.5, color: "var(--text)", background: "rgba(224,107,94,0.10)", border: "1px solid rgba(224,107,94,0.32)", borderRadius: 5, padding: "7px 10px", marginTop: 8 }}>
+          <span style={{ ...rmono, fontSize: 11, color: "var(--low)", marginRight: 6 }}>{cf.type}</span>{cf.detail}</div>))}
+    </div>
+  );
+}
+
+// ── v3 뷰 — description + capability/codedict/format/aggregation 슬롯 ──
+//   v3 뷰에서는 capability 슬롯이 항상 렌더된다(primary null 이면 "미분류"로 명시).
+//   capability.primary 가 확정된 경우, 관련 없는 슬롯(예: entity 컬럼의 aggregation)
+//   은 자연스럽게 비어 있어 렌더 안 됨.
+function AnswerCardV3({ a }) {
   if (!a) return null;
   const c = CONFC[a.confidence] || "var(--dim)";
 
-  // v3 슬롯 — 옵셔널. 없으면 렌더 안 함.
-  const cap = a.capability;
+  const cap = a.capability || {};
   const codedict = Array.isArray(a.codedict) ? a.codedict : [];
   const format = a.format;
-  const agg = a.aggregation;
+  const agg = a.aggregation || {};
 
-  const hasCap = cap && (cap.primary || (cap.alternatives && cap.alternatives.length > 0) || cap.reasoning);
+  // v3 뷰: capability 는 항상 렌더 (미분류 명시). 나머지 슬롯은 값 있을 때만.
   const hasCodedict = codedict.length > 0;
   const hasFormat = !!format;
-  const hasAgg = agg && (agg.additive || (agg.suggested && agg.suggested.length > 0) || (agg.observed_in_etl && agg.observed_in_etl.length > 0) || agg.reasoning);
-  const hasAnyV3Slot = hasCap || hasCodedict || hasFormat || hasAgg;
+  const hasAgg = !!(agg.additive || (agg.suggested && agg.suggested.length > 0) || (agg.observed_in_etl && agg.observed_in_etl.length > 0) || agg.reasoning);
 
-  // capability primary 라벨 색 — 분류별로 살짝 다르게
   const CAP_COLOR = {
     entity:                "var(--sig)",
     categorical_dimension: "var(--accent)",
     time_dimension:        "var(--med)",
     measure:               "var(--high)",
   };
-  const capColor = (cap && cap.primary && CAP_COLOR[cap.primary]) || "var(--dim)";
-
-  // additive 라벨
+  const capColor = (cap.primary && CAP_COLOR[cap.primary]) || "var(--dim)";
   const ADD_LABEL = { yes: "additive", semi: "semi-additive", no: "non-additive" };
 
   return (
@@ -313,93 +358,88 @@ function AnswerCard({ a }) {
           <span style={{ fontSize: 12.5, color: "var(--low)", fontWeight: 500 }}>사람 확인 필요 — {a.route_to_human.reason}</span>}
       </div>
 
-      {/* description — v2/v3 공통 */}
+      {/* description */}
       <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text)" }}>{a.description}</div>
 
-      {/* ─── v3 슬롯 영역 ──────────────────────────────────────────── */}
-      {hasAnyV3Slot && (
-        <div style={{ marginTop: 13, paddingTop: 11, borderTop: "1px dashed var(--rule)", display: "flex", flexDirection: "column", gap: 9 }}>
+      {/* 구조화 슬롯 영역 */}
+      <div style={{ marginTop: 13, paddingTop: 11, borderTop: "1px dashed var(--rule)", display: "flex", flexDirection: "column", gap: 9 }}>
 
-          {/* capability */}
-          {hasCap && (
-            <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
-              <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>capability</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  {cap.primary
-                    ? <span style={{ ...rmono, fontSize: 12, fontWeight: 600, color: capColor, border: `1px solid ${capColor}66`, borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{cap.primary}</span>
-                    : <span style={{ ...rmono, fontSize: 12, color: "var(--dim)", border: "1px dashed var(--rule)", borderRadius: 4, padding: "1px 8px" }}>미분류</span>}
-                  {(cap.alternatives || []).map((alt, i) => (
-                    <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 7px" }}>or {alt}</span>
-                  ))}
-                </div>
-                {cap.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{cap.reasoning}</div>}
-              </div>
+        {/* capability — 항상 렌더 (미분류도 명시) */}
+        <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>capability</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {cap.primary
+                ? <span style={{ ...rmono, fontSize: 12, fontWeight: 600, color: capColor, border: `1px solid ${capColor}66`, borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{cap.primary}</span>
+                : <span style={{ ...rmono, fontSize: 12, color: "var(--dim)", border: "1px dashed var(--rule)", borderRadius: 4, padding: "1px 8px" }}>미분류</span>}
+              {(cap.alternatives || []).map((alt, i) => (
+                <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 7px" }}>or {alt}</span>
+              ))}
             </div>
-          )}
+            {cap.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{cap.reasoning}</div>}
+          </div>
+        </div>
 
-          {/* codedict */}
-          {hasCodedict && (
-            <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
-              <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>codedict</span>
-              <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 12px", ...rmono, fontSize: 12.5 }}>
-                {codedict.map((kv, i) => (
-                  <React.Fragment key={i}>
-                    <span style={{ color: "var(--sig)" }}>{kv.value}</span>
-                    <span style={{ color: "var(--text)" }}>{kv.label}</span>
-                  </React.Fragment>
+        {/* codedict */}
+        {hasCodedict && (
+          <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+            <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>codedict</span>
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 12px", ...rmono, fontSize: 12.5 }}>
+              {codedict.map((kv, i) => (
+                <React.Fragment key={i}>
+                  <span style={{ color: "var(--sig)" }}>{kv.value}</span>
+                  <span style={{ color: "var(--text)" }}>{kv.label}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* format */}
+        {hasFormat && (
+          <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
+            <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px" }}>format</span>
+            <span style={{ ...rmono, fontSize: 13, color: "var(--text)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{format}</span>
+          </div>
+        )}
+
+        {/* aggregation */}
+        {hasAgg && (
+          <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>aggregation</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                {agg.additive && <span style={{ ...rmono, fontSize: 12, color: "var(--high)", border: "1px solid var(--high)55", borderRadius: 4, padding: "1px 7px" }}>{ADD_LABEL[agg.additive] || agg.additive}</span>}
+                {(agg.suggested || []).map((fn, i) => (
+                  <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--sig)", border: "1px solid var(--sig)55", borderRadius: 4, padding: "1px 7px" }}>{fn}</span>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* format */}
-          {hasFormat && (
-            <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
-              <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px" }}>format</span>
-              <span style={{ ...rmono, fontSize: 13, color: "var(--text)", border: "1px solid var(--rule)", borderRadius: 4, padding: "1px 8px", background: "rgba(0,0,0,0.18)" }}>{format}</span>
-            </div>
-          )}
-
-          {/* aggregation */}
-          {hasAgg && (
-            <div style={{ display: "flex", gap: 9, alignItems: "flex-start", flexWrap: "wrap" }}>
-              <span style={{ ...rmono, fontSize: 10.5, color: "var(--dim)", letterSpacing: "0.08em", textTransform: "uppercase", flex: "0 0 90px", paddingTop: 3 }}>aggregation</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  {agg.additive && <span style={{ ...rmono, fontSize: 12, color: "var(--high)", border: "1px solid var(--high)55", borderRadius: 4, padding: "1px 7px" }}>{ADD_LABEL[agg.additive] || agg.additive}</span>}
-                  {(agg.suggested || []).map((fn, i) => (
-                    <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--sig)", border: "1px solid var(--sig)55", borderRadius: 4, padding: "1px 7px" }}>{fn}</span>
+              {(agg.observed_in_etl || []).length > 0 && (
+                <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 2 }}>
+                  {agg.observed_in_etl.map((s, i) => (
+                    <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--muted)" }}>↳ {s}</span>
                   ))}
                 </div>
-                {(agg.observed_in_etl || []).length > 0 && (
-                  <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 2 }}>
-                    {agg.observed_in_etl.map((s, i) => (
-                      <span key={i} style={{ ...rmono, fontSize: 11.5, color: "var(--muted)" }}>↳ {s}</span>
-                    ))}
-                  </div>
-                )}
-                {agg.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{agg.reasoning}</div>}
-              </div>
+              )}
+              {agg.reasoning && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{agg.reasoning}</div>}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* evidence — v2/v3 공통 */}
+      {/* evidence */}
       {(a.evidence || []).length > 0 &&
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
           {a.evidence.map((ev, i) => <span key={i} style={{ ...rmono, fontSize: 11, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 5, padding: "1px 7px", background: "rgba(0,0,0,0.25)" }}>{ev}</span>)}
         </div>}
 
-      {/* conflicts — v2/v3 공통 */}
+      {/* conflicts */}
       {(a.conflicts || []).map((cf, i) => (
         <div key={i} className="conflict" style={{ fontSize: 12.5, color: "var(--text)", background: "rgba(224,107,94,0.10)", border: "1px solid rgba(224,107,94,0.32)", borderRadius: 5, padding: "7px 10px", marginTop: 8 }}>
           <span style={{ ...rmono, fontSize: 11, color: "var(--low)", marginRight: 6 }}>{cf.type}</span>{cf.detail}</div>))}
     </div>
   );
 }
-
 // ---- 컬럼 상세 (우 40%) ----
 function ColumnDetail({ cid }) {
   const r = window.SIGNAL_STORE.columns[cid];
