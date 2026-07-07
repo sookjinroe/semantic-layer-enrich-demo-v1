@@ -37,15 +37,41 @@ select option{background:#14171c;color:var(--text)}
 <!-- 로컬 키 주입(선택, gitignore) -->
 <script src="local-config.js" onerror="void 0"></script>
 
-<!-- 데이터 번들 (생성됨) -->
-<script src="data/signal-store.js"></script>
-<script src="data/corpus-index.js"></script>
+<!-- 데이터셋 결정 (URL param ?dataset=fineract > localStorage > mock 기본) -->
+<script>
+(function() {
+  const p = new URLSearchParams(location.search).get("dataset");
+  const stored = localStorage.getItem("render_dataset");
+  const ds = (p === "fineract" || p === "mock") ? p
+           : (stored === "fineract" || stored === "mock") ? stored
+           : "mock";
+  if (p) localStorage.setItem("render_dataset", ds);
+  window.RENDER_DATASET = ds;
+})();
+</script>
+
+<!-- 데이터 번들 (선택된 데이터셋만 로드) -->
+<script>
+(function() {
+  const ds = window.RENDER_DATASET;
+  const files = ds === "fineract"
+    ? ["data/signal-store-fineract.js", "data/corpus-index-fineract.js"]
+    : ["data/signal-store.js",          "data/corpus-index.js"];
+  files.forEach(src => document.write('<script src="' + src + '"><\/script>'));
+})();
+</script>
 <script src="data/render-snapshot-data.js"></script>
 <!-- v3 스냅샷은 옵셔널: 파일이 아직 없으면 조용히 무시 (v3 탭의 '스냅샷 불러오기'만 비활성) -->
 <script src="data/render-snapshot-data-v3.js" onerror="void 0"></script>
 
 <!-- 로직 -->
 <script src="js/render-meta.js"></script>
+<!-- Fineract 데이터셋일 때만 TABLE_LABEL/TABLE_ORDER 오버라이드 -->
+<script>
+if (window.RENDER_DATASET === "fineract") {
+  document.write('<script src="data/render-meta-fineract.js"><\/script>');
+}
+</script>
 <script src="js/agent.js"></script>
 <script src="js/prompts.js"></script>
 <script src="js/prompt-v3.js"></script>
