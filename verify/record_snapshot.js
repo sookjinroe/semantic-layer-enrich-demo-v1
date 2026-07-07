@@ -107,7 +107,7 @@ function v3Filled(a) {
       snapshot[cid] = { trace: out.trace, answer: out.answer, model: MODEL };
 
       const a = out.answer;
-      const digOps = out.trace.filter((s) => s.kind === "op" && ["grep_code","read_file","find_refs"].includes(s.op)).length;
+      const digOps = out.trace.filter((s) => s.kind === "op" && ["list_files","grep_code","read_file","find_refs"].includes(s.op)).length;
       const parseErrs = out.trace.filter((s) => s.kind === "parse_error").length;
       parseErrTotal += parseErrs;
       const filled = v3Filled(a);

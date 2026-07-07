@@ -59,6 +59,11 @@ answer: {"action":"answer","description":"NL이 get_column 으로 못 얻는 사
 같은 op 를 같은 인자로 반복하지 마라. [남은 횟수] 0 이면 반드시 answer.`;
 
 // ── 도구 구현 (순수 함수, store/corpus 주입) ────────────────────────────────
+// 설계 원칙: 도구는 "결과"가 아니라 "다음 행동의 근거"를 돌려준다.
+//   - 검색은 지도(파일별 분포 + 총 건수)를 준다. 잘림은 숨기지 않고 명시한다.
+//   - 읽기는 조준(줄 범위)이 가능하고, 절단 시 전체 크기와 이어읽는 방법을 알려준다.
+//   - 도구는 '읽는 방법'만 제공한다. '무엇을 읽을지에 대한 지식'은 넣지 않는다
+//     (그건 에이전트가 신호에서 스스로 발견해야 할 것 — 평가 오염 방지).
 function makeTools(store, corpus) {
   const col = (cid) => (store.columns[cid] || null);
 
@@ -70,47 +75,163 @@ function makeTools(store, corpus) {
     const r = col(cid); if (!r) return { error: "unknown column" };
     return r.profile && r.profile.present ? r.profile : { present: false, note: "프로파일 없음" };
   }
-  function peek_reftable(cid) {
+  // group 미지정: 그룹 목록만(이름+행수). group 지정: 그 그룹 행들.
+  function peek_reftable(cid, args) {
     const r = col(cid); if (!r) return { error: "unknown column" };
+    const dump = store.reftable_dump || {};
+    const group = args && args.group;
+    if (group) {
+      if (dump[group] == null) return { error: "그룹 없음: " + group, available_groups: Object.keys(dump) };
+      return { group, rows: dump[group],
+        note: "이 컬럼→그룹 연결은 미선언. 값집합 매칭/코드 탐색으로 직접 이어라." };
+    }
+    const groups = Object.entries(dump).map(([g, rows]) =>
+      ({ group: g, row_count: Array.isArray(rows) ? rows.length : Object.keys(rows || {}).length }));
     return {
-      column_linked: !!(r.reftable && r.reftable.present), // 데모: 전 컬럼 미선언
-      note: "이 컬럼→그룹 연결은 미선언. 아래 덤프와 값집합 매칭/코드 탐색으로 직접 이어라.",
-      dump: store.reftable_dump || {},
+      column_linked: !!(r.reftable && r.reftable.present),
+      note: "이 컬럼→그룹 연결은 미선언. 그룹 목록을 보고 유망한 그룹을 {group:\"이름\"} 으로 다시 조회하라.",
+      groups,
+      // 그룹이 소수면 전체 덤프도 함께 (작은 store 하위호환)
+      dump: groups.length <= 3 ? dump : undefined,
     };
   }
+
+  // 조망: 코퍼스의 구조를 본다. dir 프리픽스·pattern 부분일치 필터.
+  function list_files(args) {
+    const dir = (args && args.dir || "").trim();
+    const pattern = (args && args.pattern || "").trim();
+    let paths = Object.keys(corpus);
+    if (dir) paths = paths.filter((p) => p.startsWith(dir));
+    if (pattern) paths = paths.filter((p) => p.includes(pattern));
+    const total = paths.length;
+    if (total === 0) return { total: 0, note: "해당 없음" + (dir ? " (dir=" + dir + ")" : "") };
+    // 많으면 디렉토리 수준으로 접는다
+    if (total > 60) {
+      const byDir = {};
+      paths.forEach((p) => {
+        const d = p.split("/").slice(0, -1).join("/");
+        byDir[d] = (byDir[d] || 0) + 1;
+      });
+      const dirs = Object.entries(byDir).sort((a, b) => b[1] - a[1])
+        .map(([d, n]) => ({ dir: d, file_count: n }));
+      return { total, note: "파일이 많아 디렉토리 요약으로 반환. dir 필터로 좁혀 다시 조회하라.",
+        directories: dirs.slice(0, 40),
+        directories_shown: Math.min(40, dirs.length), directories_total: dirs.length };
+    }
+    const files = paths.sort().map((p) => ({ path: p, lines: corpus[p].split("\n").length }));
+    return { total, files };
+  }
+
+  // 검색: 파일별 지도를 준다. 걸린 줄 앞뒤 문맥 포함. 총 건수는 항상 명시.
   function grep_code(args) {
     const q = (args && args.query || "").trim();
     if (!q) return { error: "query 필요" };
-    const hits = [];
+    const ctx = Math.min(Math.max((args && args.context) || 1, 0), 4);
+    const byFile = new Map();
+    let total = 0;
     for (const [path, text] of Object.entries(corpus)) {
-      text.split("\n").forEach((line, i) => {
-        if (line.includes(q)) hits.push({ file: path, line: i + 1, text: line.trim() });
+      const lines = text.split("\n");
+      lines.forEach((line, i) => {
+        if (line.includes(q)) {
+          total++;
+          if (!byFile.has(path)) byFile.set(path, []);
+          const arr = byFile.get(path);
+          if (arr.length < 5) { // 파일당 대표 매치 5개까지
+            const from = Math.max(0, i - ctx), to = Math.min(lines.length - 1, i + ctx);
+            arr.push({ line: i + 1,
+              text: lines.slice(from, to + 1).map((l, j) =>
+                (from + j + 1 === i + 1 ? "▶ " : "  ") + l.trim()).join("\n") });
+          }
+        }
       });
     }
-    return { query: q, count: hits.length, matches: hits.slice(0, 30) };
+    // 파일을 매치 수 내림차순으로 정렬 — 밀집한 파일이 유망
+    const fileEntries = [...byFile.entries()].map(([file, samples]) => {
+      const count = [...corpus[file].split("\n")].filter((l) => l.includes(q)).length;
+      return { file, count, samples };
+    }).sort((a, b) => b.count - a.count);
+    const shownFiles = fileEntries.slice(0, 12);
+    const flat = [];
+    shownFiles.forEach((f) => f.samples.forEach((s) => {
+      if (flat.length < 30) flat.push({ file: f.file, line: s.line, text: s.text.split("\n").find((l) => l.startsWith("▶ ")).slice(2) });
+    }));
+    return {
+      query: q,
+      total_matches: total,
+      total_files: fileEntries.length,
+      files: shownFiles.map((f) => ({ file: f.file, match_count: f.count, samples: f.samples })),
+      files_shown: shownFiles.length,
+      note: fileEntries.length > shownFiles.length
+        ? "파일이 더 있음(" + (fileEntries.length - shownFiles.length) + "개 미표시). 질의를 좁히거나 유망 파일을 read_file 로 조준하라."
+        : (total === 0 ? "매치 없음 — 정보 부재이지 부정 증거가 아니다." : "전체 파일 표시됨."),
+      // 하위호환(v2 하니스): flat matches·count 유지
+      matches: flat, count: total,
+    };
   }
+
+  // 읽기: 줄 범위 조준 가능. 절단은 정직하게 — 전체 크기와 이어읽는 방법 명시.
   function read_file(args) {
     const p = args && args.path;
     if (!p) return { error: "path 필요" };
-    if (corpus[p] != null) return { path: p, content: corpus[p] };
-    // 경로 느슨 매칭(파일명만 줘도)
-    const k = Object.keys(corpus).find((x) => x.endsWith("/" + p) || x.endsWith(p));
-    return k ? { path: k, content: corpus[k] } : { error: "파일 없음: " + p };
+    let key = null;
+    if (corpus[p] != null) key = p;
+    else key = Object.keys(corpus).find((x) => x.endsWith("/" + p) || x.endsWith(p)) || null;
+    if (!key) return { error: "파일 없음: " + p };
+    const lines = corpus[key].split("\n");
+    const totalLines = lines.length;
+    let from = (args && args.from_line) ? Math.max(1, args.from_line) : 1;
+    let to = (args && args.to_line) ? Math.min(totalLines, args.to_line) : totalLines;
+    const MAX_LINES = 250;
+    let truncated = false;
+    if (to - from + 1 > MAX_LINES) { to = from + MAX_LINES - 1; truncated = true; }
+    const content = lines.slice(from - 1, to).join("\n");
+    return {
+      path: key, total_lines: totalLines, from_line: from, to_line: to,
+      truncated,
+      note: truncated
+        ? "총 " + totalLines + "줄 중 " + from + "–" + to + "줄만 표시. 이어 읽으려면 {from_line:" + (to + 1) + "} 로 재호출하라. grep_code 의 줄 번호로 조준하면 더 빠르다."
+        : undefined,
+      content,
+    };
   }
+
+  // 참조 추적: 정의로 보이는 것과 사용을 갈라서 준다.
+  //   정의 감지는 약한 휴리스틱(선언 패턴) — 확신 표시는 하지 않는다.
   function find_refs(args) {
     const s = (args && args.symbol || "").trim();
     if (!s) return { error: "symbol 필요" };
     const re = new RegExp("\\b" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
-    const hits = [];
+    const defRe = new RegExp("\\b(class|enum|interface|record)\\s+" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b|\\b(private|protected|public)\\b[^=;(]*\\b" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*[;=]");
+    const defs = [];
+    const useByFile = new Map();
+    let totalUses = 0;
     for (const [path, text] of Object.entries(corpus)) {
       text.split("\n").forEach((line, i) => {
-        if (re.test(line)) hits.push({ file: path, line: i + 1, text: line.trim() });
+        if (!re.test(line)) return;
+        if (defRe.test(line) && defs.length < 10) {
+          defs.push({ file: path, line: i + 1, text: line.trim() });
+        } else {
+          totalUses++;
+          useByFile.set(path, (useByFile.get(path) || 0) + 1);
+        }
       });
     }
-    return { symbol: s, count: hits.length, matches: hits.slice(0, 30) };
+    const useFiles = [...useByFile.entries()].sort((a, b) => b[1] - a[1])
+      .map(([file, count]) => ({ file, count }));
+    const flat = defs.slice(0, 30);
+    return {
+      symbol: s,
+      definitions: defs,
+      definitions_note: defs.length ? "선언 패턴으로 보이는 위치(휴리스틱)." : "선언 패턴 미발견 — 사용만 있거나 다른 형태의 정의일 수 있다.",
+      usage_total: totalUses,
+      usage_files: useFiles.slice(0, 12),
+      usage_files_total: useFiles.length,
+      // 하위호환: 기존 matches·count
+      matches: flat, count: defs.length + totalUses,
+    };
   }
 
-  return { peek_orm, peek_profile, peek_reftable, grep_code, read_file, find_refs };
+  return { peek_orm, peek_profile, peek_reftable, list_files, grep_code, read_file, find_refs };
 }
 
 // ── 시드/매니페스트 ──────────────────────────────────────────────────────────
@@ -224,7 +345,8 @@ function dispatch(tools, op, cid, args) {
   switch (op) {
     case "peek_orm": return tools.peek_orm(cid);
     case "peek_profile": return tools.peek_profile(cid);
-    case "peek_reftable": return tools.peek_reftable(cid);
+    case "peek_reftable": return tools.peek_reftable(cid, args);
+    case "list_files": return tools.list_files(args);
     case "grep_code": return tools.grep_code(args);
     case "read_file": return tools.read_file(args);
     case "find_refs": return tools.find_refs(args);
