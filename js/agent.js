@@ -146,7 +146,10 @@ function makeTools(store, corpus) {
   function grep_code(args) {
     const q = (args && args.query || "").trim();
     if (!q) return { error: "query 필요" };
-    const ctx = Math.min(Math.max((args && args.context) || 1, 0), 4);
+    // context 는 앞뒤 문맥 줄 수(숫자). 숫자가 아니면 기본 1 — 모델이 문자열을
+    // 넘긴 실측 사례(NaN 전파로 샘플이 전부 빈 문자열이 되던 버그) 방어.
+    const rawCtx = args && args.context;
+    const ctx = Number.isFinite(+rawCtx) && rawCtx !== "" && rawCtx !== null ? Math.min(Math.max(+rawCtx, 0), 4) : 1;
     const clip = (s) => (s.length > 160 ? s.slice(0, 157) + "…" : s);
     const byFile = new Map(); // path → { count, samples[] }
     let total = 0;
