@@ -11,8 +11,7 @@
 // 데이터셋:
 //   mock       — 한국 금융권 6테이블 10컬럼 (자체 mock, PoC)
 //   fineract   — Apache Fineract 24테이블 135컬럼 (외부 자연 발생물, 검증)
-//   URL param ?dataset=X 우선, 없으면 localStorage, 없으면 mock.
-//   전환 시 페이지 리로드 (results 등 상태 초기화).
+//   좌측 상단 셀렉터로 전환. localStorage 유지, 전환 시 페이지 리로드.
 (function () {
   const m = location.hash.match(/^#k=(sk-ant-[A-Za-z0-9_\-]+)/);
   if (m) { localStorage.setItem("anthropic_key", m[1]); history.replaceState(null, "", location.pathname + location.search); }
@@ -101,9 +100,7 @@ function DatasetSelector({ current, onChange }) {
 
 function switchDataset(newId) {
   localStorage.setItem("render_dataset", newId);
-  const u = new URL(location.href);
-  u.searchParams.set("dataset", newId);
-  location.href = u.toString();
+  location.reload();
 }
 
 function AppShell() {

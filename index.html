@@ -37,16 +37,11 @@ select option{background:#14171c;color:var(--text)}
 <!-- 로컬 키 주입(선택, gitignore) -->
 <script src="local-config.js" onerror="void 0"></script>
 
-<!-- 데이터셋 결정 (URL param ?dataset=fineract > localStorage > mock 기본) -->
+<!-- 데이터셋 결정 (localStorage 저장, 기본 mock) -->
 <script>
 (function() {
-  const p = new URLSearchParams(location.search).get("dataset");
   const stored = localStorage.getItem("render_dataset");
-  const ds = (p === "fineract" || p === "mock") ? p
-           : (stored === "fineract" || stored === "mock") ? stored
-           : "mock";
-  if (p) localStorage.setItem("render_dataset", ds);
-  window.RENDER_DATASET = ds;
+  window.RENDER_DATASET = (stored === "fineract" || stored === "mock") ? stored : "mock";
 })();
 </script>
 
