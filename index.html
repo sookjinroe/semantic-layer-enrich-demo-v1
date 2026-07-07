@@ -49,10 +49,15 @@ select option{background:#14171c;color:var(--text)}
 <script>
 (function() {
   const ds = window.RENDER_DATASET;
+  // 캐시 버스팅: script tag URL에 buildTag 붙여 GitHub Pages CDN + 브라우저 캐시 회피.
+  // Fineract 데이터셋은 시드 갱신 빈도가 있어 stale 파일을 피해야 함.
+  // buildTag는 이 파일 자체가 재배포될 때 자동 갱신됨 (deploy timestamp 근사).
+  const buildTag = "20260707";
+  const q = "?v=" + buildTag;
   const files = ds === "fineract"
     ? ["data/signal-store-fineract.js", "data/corpus-index-fineract.js"]
     : ["data/signal-store.js",          "data/corpus-index.js"];
-  files.forEach(src => document.write('<script src="' + src + '"><\/script>'));
+  files.forEach(src => document.write('<script src="' + src + q + '"><\/script>'));
 })();
 </script>
 <script src="data/render-snapshot-data.js"></script>
@@ -64,7 +69,7 @@ select option{background:#14171c;color:var(--text)}
 <!-- Fineract 데이터셋일 때만 TABLE_LABEL/TABLE_ORDER 오버라이드 -->
 <script>
 if (window.RENDER_DATASET === "fineract") {
-  document.write('<script src="data/render-meta-fineract.js"><\/script>');
+  document.write('<script src="data/render-meta-fineract.js?v=20260707"><\/script>');
 }
 </script>
 <script src="js/agent.js"></script>
