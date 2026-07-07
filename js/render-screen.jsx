@@ -203,36 +203,42 @@ function RenderScreen({ mode }) {
 
   return (
     <RenderModeContext.Provider value={mode}>
-    <div style={{ display: "grid", gridTemplateColumns: "390px 1fr", gap: 0, minHeight: "calc(100vh - 50px)" }}>
-      {/* 좌 */}
-      <div style={{ borderRight: "1px solid var(--rule)", padding: "18px 16px", overflowY: "auto" }}>
-        <div style={{ ...rmono, fontSize: 18, fontWeight: 600, marginBottom: 4 }}>{headerTitle}</div>
-        <div style={{ fontSize: 14, color: "var(--dim)", marginBottom: 14, lineHeight: 1.5 }}>
-          {headerSub}
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          <Btn on={!busy} color="var(--accent)" onClick={runAll}>전체 실행</Btn>
-          <Btn on={busy} color="var(--low)" onClick={() => (abortRef.current = true)}>중단</Btn>
-          <Btn on={answered.length > 0} color="var(--sig)" onClick={saveSnapshot}>스냅샷 저장</Btn>
-          <Btn on={!!getSnapshotSrc()} color="var(--sig)" onClick={() => { try { applySnapshot(getSnapshotSrc()); } catch (e) { setNote("스냅샷 로드 실패: " + (e.message || e)); } }}>스냅샷 불러오기</Btn>
-          <Btn on={true} color="var(--dim)" onClick={() => fileRef.current.click()}>파일 열기</Btn>
-          <input ref={fileRef} type="file" accept="application/json,.json" onChange={loadFile} style={{ display: "none" }} />
-        </div>
-        {note && <div style={{ ...rmono, fontSize: 13.5, color: "var(--med)", marginBottom: 8 }}>{note}</div>}
-        {!window.RenderAPI.hasKey() && <KeyBox />}
-        {answered.length > 0 && <Summary dist={dist} total={answered.length} dig={digTotal} human={humanTotal} />}
-
-        {groups.map((g) => (
-          <div key={g.table} style={{ marginTop: 14 }}>
-            <div style={{ ...rmono, fontSize: 12.5, letterSpacing: "0.06em", color: "var(--dim)", marginBottom: 5 }}>
-              {g.label} · <span style={{ opacity: 0.6 }}>{g.table}</span>
-            </div>
-            {g.cols.map((cid) => (
-              <ColumnRow key={cid} cid={cid} r={results[cid]} active={active === cid} busy={busy}
-                onView={() => { if (cid !== runningRef.current) followRef.current = false; setActive(cid); }}
-                onRun={() => { if (!busy) runOne(cid, true); }} />))}
+    <div style={{ display: "grid", gridTemplateColumns: "390px 1fr", gap: 0, height: "calc(100vh - 50px)", overflow: "hidden" }}>
+      {/* 좌 — flex column: 상단(header/buttons/summary) 고정, 하단(컬럼 목록) 별도 스크롤 */}
+      <div style={{ borderRight: "1px solid var(--rule)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* 상단 고정 영역 */}
+        <div style={{ padding: "18px 16px 8px", flexShrink: 0 }}>
+          <div style={{ ...rmono, fontSize: 18, fontWeight: 600, marginBottom: 4 }}>{headerTitle}</div>
+          <div style={{ fontSize: 14, color: "var(--dim)", marginBottom: 14, lineHeight: 1.5 }}>
+            {headerSub}
           </div>
-        ))}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+            <Btn on={!busy} color="var(--accent)" onClick={runAll}>전체 실행</Btn>
+            <Btn on={busy} color="var(--low)" onClick={() => (abortRef.current = true)}>중단</Btn>
+            <Btn on={answered.length > 0} color="var(--sig)" onClick={saveSnapshot}>스냅샷 저장</Btn>
+            <Btn on={!!getSnapshotSrc()} color="var(--sig)" onClick={() => { try { applySnapshot(getSnapshotSrc()); } catch (e) { setNote("스냅샷 로드 실패: " + (e.message || e)); } }}>스냅샷 불러오기</Btn>
+            <Btn on={true} color="var(--dim)" onClick={() => fileRef.current.click()}>파일 열기</Btn>
+            <input ref={fileRef} type="file" accept="application/json,.json" onChange={loadFile} style={{ display: "none" }} />
+          </div>
+          {note && <div style={{ ...rmono, fontSize: 13.5, color: "var(--med)", marginBottom: 8 }}>{note}</div>}
+          {!window.RenderAPI.hasKey() && <KeyBox />}
+          {answered.length > 0 && <Summary dist={dist} total={answered.length} dig={digTotal} human={humanTotal} />}
+        </div>
+
+        {/* 컬럼 목록 — 별도 스크롤 영역 */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 18px", borderTop: "1px solid var(--rule)" }}>
+          {groups.map((g) => (
+            <div key={g.table} style={{ marginTop: 14 }}>
+              <div style={{ ...rmono, fontSize: 12.5, letterSpacing: "0.06em", color: "var(--dim)", marginBottom: 5 }}>
+                {g.label} · <span style={{ opacity: 0.6 }}>{g.table}</span>
+              </div>
+              {g.cols.map((cid) => (
+                <ColumnRow key={cid} cid={cid} r={results[cid]} active={active === cid} busy={busy}
+                  onView={() => { if (cid !== runningRef.current) followRef.current = false; setActive(cid); }}
+                  onRun={() => { if (!busy) runOne(cid, true); }} />))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* 우 */}
