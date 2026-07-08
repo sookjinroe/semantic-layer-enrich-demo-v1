@@ -139,6 +139,8 @@ function RenderScreen({ mode }) {
       "m_loan.repayment_start_date_type_enum",
       // === 번역 원리(ccc8854) 검증용: 관측→성질 · 개발어휘→업무언어 ===
       // 유형A · 순수 채움형 (짧아지는지)
+      "glim_accounts.application_id",             // 지난 라운드 리스트 누락 정정 (미실행이었음)
+      "gsim_accounts.application_id",             // 동일
       "glim_accounts.principal_amount",           // "cardinality 5, 각 5회" → 한 문장 예상
       "glim_accounts.group_id",                   // FK 서술 + 관측 채움
       "gsim_accounts.group_id",                   // "프로파일에서 모든 행이 같은 값(0)" 완화 예상
