@@ -266,43 +266,20 @@ function RenderScreen({ mode }) {
   const RERUN_SETS = {
     mock: [],
     fineract: [
-      // ═══ 사이드 이펙트 재확진 확장 세트 — 20 컬럼 ═══
-      // v3__14~15 에서 관찰된 HIGH 자기 확신·부분 권위 흔들림이
-      // 프롬프트 변경(aa1d8c8+5c15d7a) 사이드 이펙트인지 시험.
-      //
-      // 타깃 1 · HIGH 자기 확신의 재현성 (7)
-      //   status_enum 계열에서 부분 권위를 HIGH+review=False 로 자기 선언하는 패턴이
-      //   재현되는가. status/sub_status 유사 컬럼에서도 발생하는가.
-      "m_client.status_enum",                     // v3__14 MED/7R → v3__15 HIG/4. 재현 시 확진
-      "m_savings_account.status_enum",            // v3__14 HIG/8. → v3__15 HIG/4. 반복
-      "m_loan.loan_status_id",                    // 잘 되던 케이스. HIGH cd=11~12 유지 확인
-      "m_loan.loan_sub_status_id",                // 지난 라운드 cd=3 HIGH. 흔들림 여부
-      "m_savings_account.sub_status_enum",        // 지난 라운드 cd=7 HIGH. 흔들림 여부
-      "m_loan_reschedule_request.status_enum",    // 다른 status_enum. cd=3 HIGH 유지?
-      "gsim_accounts.savings_status_id",          // 정본 도달 케이스 (cd=11). 안정성
-      //
-      // 타깃 2 · 부분 권위 판정 일관성 (5)
-      //   정본이 코퍼스에 확실히 있는데 부분 권위에서 만족하는 패턴.
-      //   "정의 전체" 방침이 라운드 간에 일관되게 통하는가.
-      "m_loan_transaction.transaction_type_enum", // v3__14 강제종결→v3__15 cd=35. 다시 만족스러운가
-      "m_loan_charge.charge_time_enum",           // cd=17 정본 도달 유지 확인
-      "m_loan_term_variations.term_type",         // cd=12 정의 전체 유지
-      "m_loan_recalculation_details.compound_type_enum", // cd=4 유지
-      "m_loan_recalculation_details.compounding_frequency_type_enum", // cd=5 유지
-      //
-      // 타깃 3 · 종료 판단이 자기 정당화 채널로 작동하는가 (4)
-      //   thinking 이 확인 사실 나열용인지 미확인 발견용인지.
-      //   나쁜 사례가 반복되면 종료 판단 롤백 근거.
-      "m_loan_charge.charge_payment_mode_enum",   // 좋은 endnote 유지 확인 (정직 실패)
-      "m_loan.charge_off_reason_cv_id",           // 좋은 endnote 유지 확인 (명확 근거)
-      "m_loan.writeoff_reason_cv_id",             // 유사 CodeValue FK. endnote 어떤 성격?
-      "m_client.closure_reason_cv_id",            // 좋은 사례 (cd=3 HIGH)
-      //
-      // 타깃 4 · 회귀 없음 확인 (4)
-      "m_client.date_of_birth",                   // HIGH format 유지
-      "m_loan.client_id",                         // entity ops=2 유지
-      "glim_accounts.principal_amount",           // measure HIGH 유지
-      "m_client.email_address",                   // null capability 판정 유지
+      // seed_enrichment v3: 시드 누락 3건 보강 (2026-07-08 · commit 5aa55e5)
+      // 이전 스냅샷 __19_에서 완전 NULL로 관찰된 컬럼들. 시드 반영 후 재실행 필요.
+      // 
+      // (A) m_loan REJECTED 상태 이력 (loan_status_id=500, 188건)
+      "m_loan.rejectedon_date",
+      "m_loan.rejectedon_userid",
+      // (B) m_loan_term_variations audit (247건, v2 백필에서 누락됐던 테이블)
+      "m_loan_term_variations.created_by",
+      "m_loan_term_variations.last_modified_by",
+      "m_loan_term_variations.created_on_utc",
+      "m_loan_term_variations.last_modified_on_utc",
+      // (C) m_loan_repayment_schedule audit (63,837건 bulk)
+      "m_loan_repayment_schedule.created_on_utc",
+      "m_loan_repayment_schedule.last_modified_on_utc",
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
