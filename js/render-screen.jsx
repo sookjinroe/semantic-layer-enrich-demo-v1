@@ -22,7 +22,12 @@ function traceToEvents(trace) {
     if (s.kind === "op") {
       if (s.thinking) ev.push({ k: "think", text: s.thinking });
       ev.push({ k: "op", op: s.op, args: s.args, status: "done", result: s.result });
-    } else if (s.kind === "answer") ev.push({ k: "answer", answer: s });
+    } else if (s.kind === "answer") {
+      // 종료 판단 (answer.thinking) 을 답변 직전에 별도 이벤트로 노출.
+      // op 도중의 조사 의도(think)와 시각적으로 구분 — 파일럿 관측 채널.
+      if (s.thinking) ev.push({ k: "endnote", text: s.thinking });
+      ev.push({ k: "answer", answer: s });
+    }
   }
   return ev;
 }
@@ -181,12 +186,18 @@ function RenderScreen({ mode }) {
 
     const onStep = async (e) => {
       if (e.kind === "think") { push({ k: "think", text: e.text }); await rsleep(T.think); }
+      else if (e.kind === "endnote") { push({ k: "endnote", text: e.text }); await rsleep(T.think); }
       else if (e.kind === "op_request") { push({ k: "op", op: e.op, args: e.args, status: "req" }); await rsleep(T.req); }
       else if (e.kind === "op_done") {
         const i = events.findLastIndex((x) => x.k === "op" && x.status === "req");
         if (i >= 0) { events[i] = { ...events[i], status: "done", result: e.result }; setRes(cid, { events: [...events] }); }
         await rsleep(T.done);
-      } else if (e.kind === "answer") { push({ k: "answer", answer: e }); }
+      } else if (e.kind === "answer") {
+        // 라이브 스트림: answer 앞에 종료 판단(thinking) 을 endnote 로 먼저 노출.
+        // 스냅샷 재생과 동일한 시각적 흐름을 만든다.
+        if (e.thinking) push({ k: "endnote", text: e.thinking });
+        push({ k: "answer", answer: e });
+      }
     };
 
     try {
@@ -352,6 +363,13 @@ function Thread({ cid, r }) {
 function REvent({ e }) {
   if (e.k === "think")
     return <div style={{ borderLeft: "2px solid var(--med)", padding: "4px 12px", margin: "10px 0", fontSize: 14.5, color: "var(--muted, var(--dim))", fontStyle: "italic" }}>{e.text}</div>;
+  if (e.k === "endnote")
+    // 종료 판단 — op-중 think 와 구분되게 조금 더 강조 (실선 + 배경 없이 라벨만).
+    return (
+      <div style={{ borderLeft: "2px solid var(--sig)", padding: "6px 12px", margin: "14px 0 10px", fontSize: 14.5, color: "var(--text)", lineHeight: 1.55 }}>
+        <span style={{ ...rmono, fontSize: 10, color: "var(--sig)", letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 3 }}>종료 판단</span>
+        {e.text}
+      </div>);
   if (e.k === "op") {
     const t2 = TIER2.has(e.op);
     return (
