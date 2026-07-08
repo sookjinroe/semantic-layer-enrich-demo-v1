@@ -266,43 +266,28 @@ function RenderScreen({ mode }) {
   const RERUN_SETS = {
     mock: [],
     fineract: [
-      // ═══ 사이드 이펙트 재확진 확장 세트 — 20 컬럼 ═══
-      // v3__14~15 에서 관찰된 HIGH 자기 확신·부분 권위 흔들림이
-      // 프롬프트 변경(aa1d8c8+5c15d7a) 사이드 이펙트인지 시험.
+      // ═══ 틀림/빠짐 구분 (codedict 계약) 검증 세트 — 10 컬럼 ═══
+      // 판정 기준: 부분 codedict(빠짐)는 review=False + note에 구멍 기록.
+      //           review=True 는 담은 것의 정확성 의심(틀림)에만.
       //
-      // 타깃 1 · HIGH 자기 확신의 재현성 (7)
-      //   status_enum 계열에서 부분 권위를 HIGH+review=False 로 자기 선언하는 패턴이
-      //   재현되는가. status/sub_status 유사 컬럼에서도 발생하는가.
-      "m_client.status_enum",                     // v3__14 MED/7R → v3__15 HIG/4. 재현 시 확진
-      "m_savings_account.status_enum",            // v3__14 HIG/8. → v3__15 HIG/4. 반복
-      "m_loan.loan_status_id",                    // 잘 되던 케이스. HIGH cd=11~12 유지 확인
-      "m_loan.loan_sub_status_id",                // 지난 라운드 cd=3 HIGH. 흔들림 여부
-      "m_savings_account.sub_status_enum",        // 지난 라운드 cd=7 HIGH. 흔들림 여부
-      "m_loan_reschedule_request.status_enum",    // 다른 status_enum. cd=3 HIGH 유지?
-      "gsim_accounts.savings_status_id",          // 정본 도달 케이스 (cd=11). 안정성
+      // ① 흔들리던 케이스 — 이제 일관돼야 함
+      "m_client.status_enum",                     // 6라운드 동요(MED-R↔HIGH). 새 기준: 담은 것 확인됐으면
+                                                  //   HIGH/MED + review=False + note에 "500·700·800 라벨 미확인"
+      "m_savings_account.status_enum",            // 동일 패턴. 일관성 확인
+      "m_loan.loan_sub_status_id",                // 정의 밖 실데이터 값(200). HIGH 유지 + note에 200 기록되는가
       //
-      // 타깃 2 · 부분 권위 판정 일관성 (5)
-      //   정본이 코퍼스에 확실히 있는데 부분 권위에서 만족하는 패턴.
-      //   "정의 전체" 방침이 라운드 간에 일관되게 통하는가.
-      "m_loan_transaction.transaction_type_enum", // v3__14 강제종결→v3__15 cd=35. 다시 만족스러운가
-      "m_loan_charge.charge_time_enum",           // cd=17 정본 도달 유지 확인
-      "m_loan_term_variations.term_type",         // cd=12 정의 전체 유지
-      "m_loan_recalculation_details.compound_type_enum", // cd=4 유지
-      "m_loan_recalculation_details.compounding_frequency_type_enum", // cd=5 유지
+      // ② 대조군 — 완전 일치 케이스, 변화 없어야 함
+      "m_loan.loan_status_id",                    // 실데이터⊂정의. HIGH cd=12 유지
+      "m_loan_reschedule_request.status_enum",    // 동일. HIGH cd=12 유지
+      "m_savings_account.sub_status_enum",        // 데이터 0만, 정의 7개. HIGH cd=7 유지
+      "m_client.closure_reason_cv_id",            // 완전 일치 깨끗. HIGH cd=3 유지
       //
-      // 타깃 3 · 종료 판단이 자기 정당화 채널로 작동하는가 (4)
-      //   thinking 이 확인 사실 나열용인지 미확인 발견용인지.
-      //   나쁜 사례가 반복되면 종료 판단 롤백 근거.
-      "m_loan_charge.charge_payment_mode_enum",   // 좋은 endnote 유지 확인 (정직 실패)
-      "m_loan.charge_off_reason_cv_id",           // 좋은 endnote 유지 확인 (명확 근거)
-      "m_loan.writeoff_reason_cv_id",             // 유사 CodeValue FK. endnote 어떤 성격?
-      "m_client.closure_reason_cv_id",            // 좋은 사례 (cd=3 HIGH)
+      // ③ 틀림 방어 유지 — 빠짐 완화가 틀림 방어를 약화시키지 않는가
+      "m_loan_charge.charge_payment_mode_enum",   // 권위 전무 — 여전히 LOW+review=True(빈 codedict)가 정답
+      "m_loan.charge_off_reason_cv_id",           // 권위 확인 3개 — HIGH/MED + review=False 유지
       //
-      // 타깃 4 · 회귀 없음 확인 (4)
-      "m_client.date_of_birth",                   // HIGH format 유지
-      "m_loan.client_id",                         // entity ops=2 유지
-      "glim_accounts.principal_amount",           // measure HIGH 유지
-      "m_client.email_address",                   // null capability 판정 유지
+      // ④ 회귀 확인
+      "gsim_accounts.savings_status_id",          // cd=11 HIGH 유지
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
