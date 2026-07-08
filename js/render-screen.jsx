@@ -266,27 +266,36 @@ function RenderScreen({ mode }) {
   const RERUN_SETS = {
     mock: [],
     fineract: [
-      // ═══ 종료판단·codedict전체·note어휘 (aa1d8c8+) 검증 세트 ═══
-      // ① 종료 판단 (thinking) — 조기 종료·과잉 탐색 대표
-      "m_client.status_enum",                     // 조기 종료 대표: 수단(find_refs enum) 남기고 종결하던 것. thinking에 그 인지가 담기는가
-      "m_savings_account.status_enum",            // 동일
-      "m_loan.charge_off_reason_cv_id",           // 과잉 탐색 대표(12 ops): "수단 없음"을 더 일찍 인지하는가
-      "m_loan_charge.charge_payment_mode_enum",   // 동일 (원리적 부재)
-      // ② codedict 정의 전체 — 동요하던 케이스
-      "gsim_accounts.savings_status_id",          // 11→3 동요. 정본 도달 시 11개 전체 담는가
-      "m_loan_transaction.transaction_type_enum", // 8→6 동요
-      "m_loan_term_variations.term_type",         // 관찰만 5개 담던 것 → 정의 12개 전체?
-      "m_loan_charge.charge_time_enum",           // 16/17 — 전체 유지 확인
-      // ③ review_note 업무 언어 — 개발 어휘 침투 케이스
-      "gsim_accounts.accepting_child",            // INTEGER 침투
-      "glim_accounts.application_id",             // cardinality 침투
-      "m_loan.expected_maturedon_date",           // null_rate·LocalDate 침투
-      // ④ 시점성 새 방침(성질+근거수치 허용) 합격선 확인
-      "m_loan.accrued_till",                      // 성질+수치 병기 형태가 유지되는가 (이제 합격)
-      "m_loan.charged_off_on_date",               // 동일
-      // ⑤ 회귀/효율
-      "m_loan.loan_status_id",                    // cd=11 HIGH 유지
-      "m_loan.client_id",                         // ops=2 효율 유지
+      // ═══ 사이드 이펙트 3건 확진 (a1de417 이후) — 11 컬럼 ═══
+      //
+      // ① parse_error 재현 시험 (marketable/펜스 재발?)
+      "m_loan_transaction.transaction_type_enum", // ★ 정본 40+개, v3__14 에서 parse_error 4회 후 강제종결.
+                                                  //   재실행 성공하면 haiku 확률적 실패 확진 → 롤백 근거 소멸.
+                                                  //   재실행 실패하면 큰 산출에서의 형식 이탈 확진 → 프롬프트 강화.
+      //
+      // ② application_id primary=None 회귀 재확진
+      "glim_accounts.application_id",             // v3__11~13 entity → v3__14 None. 재현되면 종료 판단 원리의
+      "gsim_accounts.application_id",             // 카디널리티 1 컬럼 정합성 문제.
+      //
+      // ③ savings_status_enum HIGH 자기 확신 재확진
+      "m_savings_account.status_enum",            // v3__14 에서 부분 권위(cd=7)를 HIGH+review=False 로 자기 선언.
+                                                  //   재현 시 종료 판단이 자신감 과잉을 유발한다는 증거.
+                                                  //   재료 확인 필요: r_enum_value 시드가 실제 몇 개인가.
+      //
+      // ④ 종료 판단 좋은/나쁜 사례 재현 확인
+      "m_loan_charge.charge_payment_mode_enum",   // v3__14 endnote 좋은 예 ("여러 방식으로 추적 후 미도달").
+                                                  //   유지되면 종료 판단 원리 성공 확진.
+      "m_loan.charge_off_reason_cv_id",           // v3__14 endnote 좋은 예 (근거 명확). 유지 확인.
+      "m_client.status_enum",                     // v3__14 endnote 정직한 부분 권위 인지 (cd=4→7). 유지 확인.
+      //
+      // ⑤ 회귀 없음 확인 (자연스럽게 나올 것들)
+      "gsim_accounts.savings_status_id",          // cd=11 유지 (정의 전체 방침)
+      "m_loan_term_variations.term_type",         // cd=12 유지 (정의 전체 명중)
+      "m_loan.loan_status_id",                    // cd=11~12 HIGH 유지 — 핵심 안정 지표
+      //
+      // ⑥ 큰 codedict 산출에서 parse_error 조건 확인
+      "m_savings_account.interest_posting_period_enum", // cd=10 규모. transaction_type 만 아니라 다른 큰 산출에서도
+                                                       //   pars_error 나오면 산출 크기가 원인이라는 강한 증거.
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
