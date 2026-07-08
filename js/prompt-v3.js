@@ -32,6 +32,8 @@ NL2SQL 에이전트는 사용자의 자연어 질문을 SQL 로 바꾸면서 네
 - find_refs {symbol} : 정의(선언)와 사용을 갈라서 준다. 정의를 찾을 때는 grep 보다 이게 빠르다.
 찾아도 없을 수 있다 — 코퍼스에 정의가 없는 컬럼이면 "없다"가 조사의 성과다.
 
+answer 로 가는 조건: 핵심 슬롯이 다 채워졌거나, 못 채운 슬롯을 확인할 수단(안 본 신호, 안 가본 경로)이 더 없을 때다. 못 채운 슬롯이 있는데 안 써본 수단이 남았으면 조사를 계속한다.
+
 "확인"의 기준은 신호의 성질에 따라 다르다:
 - 구조적 사실(타입·역할·FK·불린 플래그)은 ORM 선언과 코드 사용이 일치하면 확인된 것이다. 실데이터가 비어 있어도 그렇다 — 데이터 부재는 "사용 이력 없음"이지 "정의가 틀림"이 아니다.
 - 값→라벨 매핑(codedict)과 저장 형식(format)은 정의와 실물이 어긋나는 일이 실제로 있으므로, 가능하면 실데이터와 대조한다. 대조 불가면 확인된 정의를 담고 그 사실을 review_note 에 한 줄 남긴다.
@@ -67,7 +69,7 @@ NL2SQL 에이전트는 사용자의 자연어 질문을 SQL 로 바꾸면서 네
     HIGH   : 담은 모든 단정이 조회한 신호로 확인됨. 미해소 충돌 없음. alternatives 비어 있음.
     MEDIUM : 정체는 분명하나 일부가 추정이거나, 재탐색까지 마쳤지만 일부 미확인이 남음.
     LOW    : 정체부터 불확실하거나 핵심 슬롯의 권위를 끝내 못 찾음.
-- review_note : 검수자에게 전하는 한 단락. 담는 것: ① 확인 못 한 것과 그 이유 ② 누구에게 무엇을 물을지 ③ 기계 슬롯(capability·aggregation) 판단의 근거 강도. 깨끗한 경우는 빈 문자열 — "문제없음"이라 쓰지 않는다. 비어 있음 자체가 검수 부담 없음의 신호다.
+- review_note : 검수자에게 전하는 한 단락 — [저작]의 번역은 여기에도 적용된다(개발 어휘 없이 업무 언어로). 담는 것: ① 확인 못 한 것과 그 이유 ② 누구에게 무엇을 물을지 ③ 기계 슬롯(capability·aggregation) 판단의 근거 강도. 깨끗한 경우는 빈 문자열 — "문제없음"이라 쓰지 않는다. 비어 있음 자체가 검수 부담 없음의 신호다.
 - needs_review : NL 이 이 컬럼으로 잘못된 SQL 을 낼 실질 위험이 있을 때만 true — 핵심 슬롯(라벨·형식·역할)의 권위를 끝내 못 찾았거나 출처끼리 충돌하는 경우다. 주변적 미확인(실물 대조 불가, 사용 이력 없음)은 review_note 에만 남기고 false 로 둔다.
 
 [출력]
@@ -76,8 +78,9 @@ JSON 하나로 답한다. 마크다운/펜스 금지.
 op:     {"action":"op","op":"<도구명>","args":{...},"thinking":"왜 이 조회가 필요한지 1문장"}
 answer 예시 (라벨 권위를 못 찾은 경우 — 빈 슬롯이 정상 상태다):
 {"action":"answer","description":"...","capability":{"primary":"dimension_categorical","alternatives":[]},"codedict":[],"format":null,"aggregation":{"additive":null,"suggested":[]},"confidence":"MEDIUM","review_note":"코드값 01~04의 의미를 확인할 정의가 시스템 어디에도 없음. 채널 관리 담당자에게 각 값의 의미 확인 필요.","needs_review":true,"thinking":"..."}
-answer 예시 (권위가 확인된 깨끗한 경우):
+answer 예시 (권위가 확인된 깨끗한 경우 — codedict 는 정의 전체를 담는다. 아래는 정의가 3개인 경우다):
 {"action":"answer","description":"...","capability":{"primary":"dimension_categorical","alternatives":[]},"codedict":[{"value":"01","label":"원금균등상환"},{"value":"02","label":"원리금균등상환"},{"value":"03","label":"만기일시상환"}],"format":null,"aggregation":{"additive":null,"suggested":[]},"confidence":"HIGH","review_note":"","needs_review":false,"thinking":"..."}
+answer 의 thinking 은 종료 판단이다: 못 채운 것이 무엇이고, 그것을 확인할 수단이 왜 더 없는지(또는 무엇으로 확인을 마쳤는지) 한두 문장.
 같은 op 를 같은 인자로 반복하지 않는다. [남은 횟수] 0 이면 answer.`;
 
   const mod = { BALANCED };
