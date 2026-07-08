@@ -137,6 +137,34 @@ function RenderScreen({ mode }) {
       // 부자연 시드 수정 (enum 정의에 없는 값 제거)
       "m_client.sub_status",
       "m_loan.repayment_start_date_type_enum",
+      // === 번역 원리(ccc8854) 검증용: 관측→성질 · 개발어휘→업무언어 ===
+      // 유형A · 순수 채움형 (짧아지는지)
+      "glim_accounts.principal_amount",           // "cardinality 5, 각 5회" → 한 문장 예상
+      "glim_accounts.group_id",                   // FK 서술 + 관측 채움
+      "gsim_accounts.group_id",                   // "프로파일에서 모든 행이 같은 값(0)" 완화 예상
+      "gsim_accounts.parent_deposit",             // "동일 값이 20% 빈도로 반복"
+      "m_loan.approvedon_userid",                 // "null_rate 5%" 완화
+      "m_loan.closedon_userid",                   // "78%의 값이 null"
+      "m_loan.disbursedon_userid",                // "값이 없음(null_rate 100%)"
+      "m_client.activatedon_userid",              // "약 24.5%의 레코드에서 null"
+      // 유형B · 좋은 반쪽 혼재 (관측이 성질로 번역되는지 — 이 라운드의 핵심)
+      "m_loan.charged_off_by_userid",             // "98.57%" 사라지고 "상각된 대출만"만 남는지
+      "m_loan.charged_off_on_date",               // 동일 계열
+      "m_loan.closedon_date",                     // "78% NULL" → "진행 중인 대출"
+      "m_loan.accrued_till",                      // "73.5% NULL" → "선택적 필드"
+      // 유형C · review_note 개발 용어 (업무 언어로 번역되는지)
+      "glim_accounts.accepting_child",            // note "ORM에서 Boolean"
+      "gsim_accounts.accepting_child",            // note 개발 용어
+      "m_loan.allow_full_term_for_tranche",       // note "ORM에서"
+      "m_loan.create_standing_instruction_at_disbursement", // note "null_rate"
+      "m_loan.expected_maturedon_date",           // note "null_rate=1.0", "LocalDate"
+      "m_loan_amortization_allocation_mapping.amortization_type", // note "enum"
+      // 회귀 확인 (번역 도입으로 손상되지 않는지 — cd 개수 유지)
+      "m_loan.loan_status_id",                    // cd=11 유지
+      "gsim_accounts.savings_status_id",          // cd=11 유지
+      "m_loan_term_variations.term_type",         // cd=12 유지
+      "m_savings_account.interest_posting_period_enum", // cd=10 유지
+      "m_loan_charge.charge_time_enum",           // cd=6 유지
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
