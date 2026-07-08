@@ -207,10 +207,11 @@ function RenderScreen({ mode }) {
 
   // ---- 스냅샷 ----
   function saveSnapshot() {
+    // 필터는 view용이므로 저장 시 무시하고 results 전체 대상.
     const snap = { version: 1, kind: "render", mode, model: window.RenderAPI.getModel(),
       prompt_id: getPromptId(), created: new Date().toISOString(),
-      results: Object.fromEntries(allCols.filter((c) => results[c] && results[c].trace)
-        .map((c) => [c, { trace: results[c].trace, answer: results[c].answer }])) };
+      results: Object.fromEntries(Object.entries(results).filter(([c, r]) => r && r.trace)
+        .map(([c, r]) => [c, { trace: r.trace, answer: r.answer }])) };
     const blob = new Blob([JSON.stringify(snap)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = snapshotFilename; a.click();
   }
