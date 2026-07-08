@@ -121,37 +121,22 @@ function RenderScreen({ mode }) {
     // Fineract 검증셋은 별도 선정 중 — 임시로 빈 배열
     fineract: [],
   };
-  // 재실행 필요셋 — 시드 확장(2026-07-07d)으로 값 채워진 컬럼. 이 컬럼들만 스냅샷 대비
-  // 결과가 뒤집힐 수 있음.
+  // 재실행 필요셋 — 데이터 준비 조치가 반영되어 이전 스냅샷 결과가 뒤집힐 수 있는 컬럼.
   const RERUN_SETS = {
     mock: [],
     fineract: [
-      // m_client (15)
-      "m_client.activatedon_userid", "m_client.client_type_cv_id",
-      "m_client.closedon_date", "m_client.closedon_userid",
-      "m_client.closure_reason_cv_id", "m_client.default_savings_account",
-      "m_client.default_savings_product", "m_client.fullname",
-      "m_client.image_id", "m_client.legal_form_enum",
-      "m_client.reject_reason_cv_id", "m_client.sub_status",
+      // CodeValue 라벨을 reftable_dump에 노출 (buildTag 20260707e)
+      "m_client.client_type_cv_id",
+      "m_client.closure_reason_cv_id",
+      "m_client.reject_reason_cv_id",
       "m_client.withdraw_reason_cv_id",
-      "m_client.created_by", "m_client.last_modified_by",
-      // m_loan (14)
-      "m_loan.accrued_till", "m_loan.approvedon_userid",
-      "m_loan.charge_off_reason_cv_id", "m_loan.charged_off_by_userid",
-      "m_loan.charged_off_on_date", "m_loan.closedon_userid",
-      "m_loan.expected_disbursedon_date", "m_loan.expected_firstrepaymenton_date",
-      "m_loan.loan_sub_status_id", "m_loan.loanpurpose_cv_id",
-      "m_loan.repayment_start_date_type_enum", "m_loan.writeoff_reason_cv_id",
-      "m_loan.created_by", "m_loan.last_modified_by",
-      // 세부 서브 (8)
-      "m_loan_recalculation_details.rest_frequency_nth_day_enum",
-      "m_loan_recalculation_details.rest_frequency_weekday_enum",
+      "m_loan.charge_off_reason_cv_id",
+      "m_loan.loanpurpose_cv_id",
+      "m_loan.writeoff_reason_cv_id",
       "m_loan_reschedule_request.reschedule_reason_cv_id",
-      "m_savings_account.lockedin_until_date_derived",
-      "m_savings_account.lockin_period_frequency_enum",
-      "m_savings_account.on_hold_funds_derived",
-      "m_savings_product.lockin_period_frequency_enum",
-      "m_deposit_account_term_and_preclosure.expected_firstdepositon_date",
+      // 부자연 시드 수정 (enum 정의에 없는 값 제거)
+      "m_client.sub_status",
+      "m_loan.repayment_start_date_type_enum",
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
