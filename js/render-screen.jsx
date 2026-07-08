@@ -119,6 +119,11 @@ function RenderScreen({ mode }) {
       "m_loan_charge.charge_payment_mode_enum", "m_loan.charge_off_reason_cv_id",
     ],
     // Fineract 검증셋은 별도 선정 중 — 임시로 빈 배열
+    fineract: [],
+  };
+  // 재실행 필요셋 — 스냅샷 이후 데이터/프롬프트 갱신으로 결과가 뒤집힐 수 있는 컬럼.
+  const RERUN_SETS = {
+    mock: [],
     fineract: [
       // ═══ 2차 재작성(e98ebbc) 검증 세트 — 4개 관점 ═══
       // ① 번역/시점성 — 핵심 목표. 유형 B(병기 소거가 직접 시험), A(유지+실패 재시험), C(개발 어휘)
@@ -153,7 +158,7 @@ function RenderScreen({ mode }) {
       // ④ 방어 유지 + 삭제 리스크 관찰
       "m_loan_charge.charge_payment_mode_enum",   // 원리적 부재 — 여전히 LOW+review가 정답
       "m_client.gender_cv_id",                    // m_code_value 부재 — note 품질 관찰
-      "m_deposit_account_term_and_preclosure.deposit_period_frequency_enum", // dig 경로에서 grep 질의가 단일 식별자 패턴 유지하는가 (삭제 리스크)
+      "m_deposit_account_term_and_preclosure.deposit_period_frequency_enum", // dig 경로에서 grep 질의가 단일 식별자 패턴 유지 (삭제 리스크)
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
