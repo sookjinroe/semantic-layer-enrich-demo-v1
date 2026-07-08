@@ -104,25 +104,72 @@ function RenderScreen({ mode }) {
   const followRef = rUseRef(true);
   const runningRef = rUseRef(null);
   const fileRef = rUseRef(null);
-  const VERIFY_SET = [
-    "m_client.status_enum", "m_savings_account.status_enum",
-    "glim_accounts.accepting_child", "gsim_accounts.accepting_child",
-    "glim_accounts.child_accounts_count", "gsim_accounts.application_id",
-    "m_loan.loan_status_id", "gsim_accounts.savings_status_id",
-    "m_deposit_account_term_and_preclosure.deposit_period_frequency_enum",
-    "m_loan_payment_allocation_rule.transaction_type",
-    "m_loan.loan_sub_status_id", "m_client.date_of_birth",
-    "m_loan.client_id", "m_savings_account.sub_status_enum",
-    "m_loan_charge.charge_payment_mode_enum", "m_loan.charge_off_reason_cv_id",
-  ];
+  // 검증셋·재실행셋을 데이터셋별로 분리. Fineract는 시드 확장 이후 값 채워진 컬럼을
+  // 재실행 필요셋으로 노출 (스냅샷 생성 시점 이후 데이터가 갱신됨).
+  const VERIFY_SETS = {
+    mock: [
+      "m_client.status_enum", "m_savings_account.status_enum",
+      "glim_accounts.accepting_child", "gsim_accounts.accepting_child",
+      "glim_accounts.child_accounts_count", "gsim_accounts.application_id",
+      "m_loan.loan_status_id", "gsim_accounts.savings_status_id",
+      "m_deposit_account_term_and_preclosure.deposit_period_frequency_enum",
+      "m_loan_payment_allocation_rule.transaction_type",
+      "m_loan.loan_sub_status_id", "m_client.date_of_birth",
+      "m_loan.client_id", "m_savings_account.sub_status_enum",
+      "m_loan_charge.charge_payment_mode_enum", "m_loan.charge_off_reason_cv_id",
+    ],
+    // Fineract 검증셋은 별도 선정 중 — 임시로 빈 배열
+    fineract: [],
+  };
+  // 재실행 필요셋 — 시드 확장(2026-07-07d)으로 값 채워진 컬럼. 이 컬럼들만 스냅샷 대비
+  // 결과가 뒤집힐 수 있음.
+  const RERUN_SETS = {
+    mock: [],
+    fineract: [
+      // m_client (15)
+      "m_client.activatedon_userid", "m_client.client_type_cv_id",
+      "m_client.closedon_date", "m_client.closedon_userid",
+      "m_client.closure_reason_cv_id", "m_client.default_savings_account",
+      "m_client.default_savings_product", "m_client.fullname",
+      "m_client.image_id", "m_client.legal_form_enum",
+      "m_client.reject_reason_cv_id", "m_client.sub_status",
+      "m_client.withdraw_reason_cv_id",
+      "m_client.created_by", "m_client.last_modified_by",
+      // m_loan (14)
+      "m_loan.accrued_till", "m_loan.approvedon_userid",
+      "m_loan.charge_off_reason_cv_id", "m_loan.charged_off_by_userid",
+      "m_loan.charged_off_on_date", "m_loan.closedon_userid",
+      "m_loan.expected_disbursedon_date", "m_loan.expected_firstrepaymenton_date",
+      "m_loan.loan_sub_status_id", "m_loan.loanpurpose_cv_id",
+      "m_loan.repayment_start_date_type_enum", "m_loan.writeoff_reason_cv_id",
+      "m_loan.created_by", "m_loan.last_modified_by",
+      // 세부 서브 (8)
+      "m_loan_recalculation_details.rest_frequency_nth_day_enum",
+      "m_loan_recalculation_details.rest_frequency_weekday_enum",
+      "m_loan_reschedule_request.reschedule_reason_cv_id",
+      "m_savings_account.lockedin_until_date_derived",
+      "m_savings_account.lockin_period_frequency_enum",
+      "m_savings_account.on_hold_funds_derived",
+      "m_savings_product.lockin_period_frequency_enum",
+      "m_deposit_account_term_and_preclosure.expected_firstdepositon_date",
+    ],
+  };
+  const ds = window.RENDER_DATASET || "mock";
+  const VERIFY_SET = VERIFY_SETS[ds] || [];
+  const RERUN_SET = RERUN_SETS[ds] || [];
   const [colFilter, setColFilter] = rUseState("all");
   const groupsAll = window.RenderMeta.groupByTable();
   const verifySet = new Set(VERIFY_SET);
-  const groups = colFilter === "verify"
-    ? groupsAll.map((g) => ({ ...g, cols: g.cols.filter((c) => verifySet.has(c)) })).filter((g) => g.cols.length > 0)
+  const rerunSet = new Set(RERUN_SET);
+  const filterFn = colFilter === "verify" ? (c) => verifySet.has(c)
+                 : colFilter === "rerun"  ? (c) => rerunSet.has(c)
+                 : null;
+  const groups = filterFn
+    ? groupsAll.map((g) => ({ ...g, cols: g.cols.filter(filterFn) })).filter((g) => g.cols.length > 0)
     : groupsAll;
   const allCols = groups.flatMap((g) => g.cols);
   const verifyCount = groupsAll.flatMap((g) => g.cols).filter((c) => verifySet.has(c)).length;
+  const rerunCount  = groupsAll.flatMap((g) => g.cols).filter((c) => rerunSet.has(c)).length;
 
   const setRes = (id, patch) => setResults((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
 
@@ -245,7 +292,7 @@ function RenderScreen({ mode }) {
         {/* 컬럼 목록 — 별도 스크롤 영역 */}
         <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 18px", borderTop: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-            {[["all", "전체"], ["verify", `검증셋 (${verifyCount})`]].map(([k, label]) => (
+            {[["all", "전체"], ["verify", `검증셋 (${verifyCount})`], ["rerun", `재실행 필요 (${rerunCount})`]].map(([k, label]) => (
               <div key={k} onClick={() => setColFilter(k)}
                 style={{ ...rmono, fontSize: 12, padding: "3px 12px", cursor: "pointer", borderRadius: 4,
                   color: colFilter === k ? "#0c0e11" : "var(--dim)",
