@@ -119,54 +119,41 @@ function RenderScreen({ mode }) {
       "m_loan_charge.charge_payment_mode_enum", "m_loan.charge_off_reason_cv_id",
     ],
     // Fineract 검증셋은 별도 선정 중 — 임시로 빈 배열
-    fineract: [],
-  };
-  // 재실행 필요셋 — 데이터 준비 조치가 반영되어 이전 스냅샷 결과가 뒤집힐 수 있는 컬럼.
-  const RERUN_SETS = {
-    mock: [],
     fineract: [
-      // CodeValue 라벨을 reftable_dump에 노출 (buildTag 20260707e)
-      "m_client.client_type_cv_id",
-      "m_client.closure_reason_cv_id",
-      "m_client.reject_reason_cv_id",
-      "m_client.withdraw_reason_cv_id",
-      "m_loan.charge_off_reason_cv_id",
-      "m_loan.loanpurpose_cv_id",
-      "m_loan.writeoff_reason_cv_id",
-      "m_loan_reschedule_request.reschedule_reason_cv_id",
-      // 부자연 시드 수정 (enum 정의에 없는 값 제거)
-      "m_client.sub_status",
-      "m_loan.repayment_start_date_type_enum",
-      // === 번역 원리(ccc8854) 검증용: 관측→성질 · 개발어휘→업무언어 ===
-      // 유형A · 순수 채움형 (짧아지는지)
-      "glim_accounts.application_id",             // 지난 라운드 리스트 누락 정정 (미실행이었음)
-      "gsim_accounts.application_id",             // 동일
-      "glim_accounts.principal_amount",           // "cardinality 5, 각 5회" → 한 문장 예상
-      "glim_accounts.group_id",                   // FK 서술 + 관측 채움
-      "gsim_accounts.group_id",                   // "프로파일에서 모든 행이 같은 값(0)" 완화 예상
-      "gsim_accounts.parent_deposit",             // "동일 값이 20% 빈도로 반복"
-      "m_loan.approvedon_userid",                 // "null_rate 5%" 완화
-      "m_loan.closedon_userid",                   // "78%의 값이 null"
-      "m_loan.disbursedon_userid",                // "값이 없음(null_rate 100%)"
-      "m_client.activatedon_userid",              // "약 24.5%의 레코드에서 null"
-      // 유형B · 좋은 반쪽 혼재 (관측이 성질로 번역되는지 — 이 라운드의 핵심)
-      "m_loan.charged_off_by_userid",             // "98.57%" 사라지고 "상각된 대출만"만 남는지
-      "m_loan.charged_off_on_date",               // 동일 계열
-      "m_loan.closedon_date",                     // "78% NULL" → "진행 중인 대출"
-      "m_loan.accrued_till",                      // "73.5% NULL" → "선택적 필드"
-      // 유형C · review_note 개발 용어 (업무 언어로 번역되는지)
-      "glim_accounts.accepting_child",            // note "ORM에서 Boolean"
-      "gsim_accounts.accepting_child",            // note 개발 용어
-      "m_loan.allow_full_term_for_tranche",       // note "ORM에서"
-      "m_loan.create_standing_instruction_at_disbursement", // note "null_rate"
-      "m_loan.expected_maturedon_date",           // note "null_rate=1.0", "LocalDate"
-      "m_loan_amortization_allocation_mapping.amortization_type", // note "enum"
-      // 회귀 확인 (번역 도입으로 손상되지 않는지 — cd 개수 유지)
-      "m_loan.loan_status_id",                    // cd=11 유지
-      "gsim_accounts.savings_status_id",          // cd=11 유지
-      "m_loan_term_variations.term_type",         // cd=12 유지
-      "m_savings_account.interest_posting_period_enum", // cd=10 유지
-      "m_loan_charge.charge_time_enum",           // cd=6 유지
+      // ═══ 2차 재작성(e98ebbc) 검증 세트 — 4개 관점 ═══
+      // ① 번역/시점성 — 핵심 목표. 유형 B(병기 소거가 직접 시험), A(유지+실패 재시험), C(개발 어휘)
+      "m_loan.charged_off_by_userid",             // B: "98.9%" 사라지고 "상각된 대출만"만 남는가
+      "m_loan.charged_off_on_date",               // B: 동일
+      "m_loan.charge_off_reason_cv_id",           // B: 동일 + note 품질
+      "m_loan.closedon_date",                     // B: "78%" → "진행 중인 대출에는 미기입"만
+      "m_loan.accrued_till",                      // B: "73%" 소거 시험
+      "glim_accounts.principal_amount",           // A: 지난번 성공 — 유지되는가
+      "gsim_accounts.parent_deposit",             // A: 지난번 성공 — 유지
+      "m_client.activatedon_userid",              // A: 지난번 실패("24.5%")
+      "m_loan.closedon_userid",                   // A: 지난번 악화(null_rate 침투) — 밀도 완화 시험
+      "glim_accounts.accepting_child",            // C: 지난번 성공 — 유지
+      "gsim_accounts.accepting_child",            // C: 지난번 실패 — glim/gsim 쌍 일관성 시금석
+      "m_loan.allow_full_term_for_tranche",       // C: 지난번 실패(java_type)
+      "m_loan.expected_maturedon_date",           // C: 지난번 감소(orm·TEXT 잔존)
+      "glim_accounts.application_id",             // C: 누락 정정분 — 첫 실측
+      "gsim_accounts.application_id",             // C: 동일 (distinct 어휘)
+      // ② 재탐색/MEDIUM 재정의 효과 — 부분 권위 멈춤이 바뀌는가
+      "m_client.status_enum",                     // 정본 ClientStatus.java 도달? (700=REJECTED)
+      "m_savings_account.status_enum",            // 정본 SavingsAccountStatusType 도달? (700=PRE_MATURE_CLOSURE)
+      "m_loan_term_variations.term_type",         // 지난번 불일치→정직 후퇴(cd 5). 재탐색으로 더 가는가
+      // ③ 사이드 이펙트/회귀 — 잘 되던 균형 유지
+      "m_loan.loan_status_id",                    // cd=11 HIGH 유지
+      "gsim_accounts.savings_status_id",          // cd=11 HIGH 유지
+      "m_loan_charge.charge_time_enum",           // cd=17 정본 완전 도달 유지
+      "m_savings_account.sub_status_enum",        // cd=7 HIGH 유지
+      "m_loan_transaction.transaction_type_enum", // cd=8 HIGH + note 품질 유지
+      "m_client.date_of_birth",                   // HIGH + format 유지
+      "m_client.email_address",                   // null capability 정직 판정 유지
+      "m_loan.client_id",                         // ops=2 효율 유지
+      // ④ 방어 유지 + 삭제 리스크 관찰
+      "m_loan_charge.charge_payment_mode_enum",   // 원리적 부재 — 여전히 LOW+review가 정답
+      "m_client.gender_cv_id",                    // m_code_value 부재 — note 품질 관찰
+      "m_deposit_account_term_and_preclosure.deposit_period_frequency_enum", // dig 경로에서 grep 질의가 단일 식별자 패턴 유지하는가 (삭제 리스크)
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
