@@ -266,36 +266,43 @@ function RenderScreen({ mode }) {
   const RERUN_SETS = {
     mock: [],
     fineract: [
-      // ═══ 사이드 이펙트 3건 확진 (a1de417 이후) — 11 컬럼 ═══
+      // ═══ 사이드 이펙트 재확진 확장 세트 — 20 컬럼 ═══
+      // v3__14~15 에서 관찰된 HIGH 자기 확신·부분 권위 흔들림이
+      // 프롬프트 변경(aa1d8c8+5c15d7a) 사이드 이펙트인지 시험.
       //
-      // ① parse_error 재현 시험 (marketable/펜스 재발?)
-      "m_loan_transaction.transaction_type_enum", // ★ 정본 40+개, v3__14 에서 parse_error 4회 후 강제종결.
-                                                  //   재실행 성공하면 haiku 확률적 실패 확진 → 롤백 근거 소멸.
-                                                  //   재실행 실패하면 큰 산출에서의 형식 이탈 확진 → 프롬프트 강화.
+      // 타깃 1 · HIGH 자기 확신의 재현성 (7)
+      //   status_enum 계열에서 부분 권위를 HIGH+review=False 로 자기 선언하는 패턴이
+      //   재현되는가. status/sub_status 유사 컬럼에서도 발생하는가.
+      "m_client.status_enum",                     // v3__14 MED/7R → v3__15 HIG/4. 재현 시 확진
+      "m_savings_account.status_enum",            // v3__14 HIG/8. → v3__15 HIG/4. 반복
+      "m_loan.loan_status_id",                    // 잘 되던 케이스. HIGH cd=11~12 유지 확인
+      "m_loan.loan_sub_status_id",                // 지난 라운드 cd=3 HIGH. 흔들림 여부
+      "m_savings_account.sub_status_enum",        // 지난 라운드 cd=7 HIGH. 흔들림 여부
+      "m_loan_reschedule_request.status_enum",    // 다른 status_enum. cd=3 HIGH 유지?
+      "gsim_accounts.savings_status_id",          // 정본 도달 케이스 (cd=11). 안정성
       //
-      // ② application_id primary=None 회귀 재확진
-      "glim_accounts.application_id",             // v3__11~13 entity → v3__14 None. 재현되면 종료 판단 원리의
-      "gsim_accounts.application_id",             // 카디널리티 1 컬럼 정합성 문제.
+      // 타깃 2 · 부분 권위 판정 일관성 (5)
+      //   정본이 코퍼스에 확실히 있는데 부분 권위에서 만족하는 패턴.
+      //   "정의 전체" 방침이 라운드 간에 일관되게 통하는가.
+      "m_loan_transaction.transaction_type_enum", // v3__14 강제종결→v3__15 cd=35. 다시 만족스러운가
+      "m_loan_charge.charge_time_enum",           // cd=17 정본 도달 유지 확인
+      "m_loan_term_variations.term_type",         // cd=12 정의 전체 유지
+      "m_loan_recalculation_details.compound_type_enum", // cd=4 유지
+      "m_loan_recalculation_details.compounding_frequency_type_enum", // cd=5 유지
       //
-      // ③ savings_status_enum HIGH 자기 확신 재확진
-      "m_savings_account.status_enum",            // v3__14 에서 부분 권위(cd=7)를 HIGH+review=False 로 자기 선언.
-                                                  //   재현 시 종료 판단이 자신감 과잉을 유발한다는 증거.
-                                                  //   재료 확인 필요: r_enum_value 시드가 실제 몇 개인가.
+      // 타깃 3 · 종료 판단이 자기 정당화 채널로 작동하는가 (4)
+      //   thinking 이 확인 사실 나열용인지 미확인 발견용인지.
+      //   나쁜 사례가 반복되면 종료 판단 롤백 근거.
+      "m_loan_charge.charge_payment_mode_enum",   // 좋은 endnote 유지 확인 (정직 실패)
+      "m_loan.charge_off_reason_cv_id",           // 좋은 endnote 유지 확인 (명확 근거)
+      "m_loan.writeoff_reason_cv_id",             // 유사 CodeValue FK. endnote 어떤 성격?
+      "m_client.closure_reason_cv_id",            // 좋은 사례 (cd=3 HIGH)
       //
-      // ④ 종료 판단 좋은/나쁜 사례 재현 확인
-      "m_loan_charge.charge_payment_mode_enum",   // v3__14 endnote 좋은 예 ("여러 방식으로 추적 후 미도달").
-                                                  //   유지되면 종료 판단 원리 성공 확진.
-      "m_loan.charge_off_reason_cv_id",           // v3__14 endnote 좋은 예 (근거 명확). 유지 확인.
-      "m_client.status_enum",                     // v3__14 endnote 정직한 부분 권위 인지 (cd=4→7). 유지 확인.
-      //
-      // ⑤ 회귀 없음 확인 (자연스럽게 나올 것들)
-      "gsim_accounts.savings_status_id",          // cd=11 유지 (정의 전체 방침)
-      "m_loan_term_variations.term_type",         // cd=12 유지 (정의 전체 명중)
-      "m_loan.loan_status_id",                    // cd=11~12 HIGH 유지 — 핵심 안정 지표
-      //
-      // ⑥ 큰 codedict 산출에서 parse_error 조건 확인
-      "m_savings_account.interest_posting_period_enum", // cd=10 규모. transaction_type 만 아니라 다른 큰 산출에서도
-                                                       //   pars_error 나오면 산출 크기가 원인이라는 강한 증거.
+      // 타깃 4 · 회귀 없음 확인 (4)
+      "m_client.date_of_birth",                   // HIGH format 유지
+      "m_loan.client_id",                         // entity ops=2 유지
+      "glim_accounts.principal_amount",           // measure HIGH 유지
+      "m_client.email_address",                   // null capability 판정 유지
     ],
   };
   const ds = window.RENDER_DATASET || "mock";
