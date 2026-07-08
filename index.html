@@ -52,7 +52,7 @@ select option{background:#14171c;color:var(--text)}
   // 캐시 버스팅: script tag URL에 buildTag 붙여 GitHub Pages CDN + 브라우저 캐시 회피.
   // Fineract 데이터셋은 시드 갱신 빈도가 있어 stale 파일을 피해야 함.
   // buildTag는 이 파일 자체가 재배포될 때 자동 갱신됨 (deploy timestamp 근사).
-  const buildTag = "20260707d";
+  const buildTag = "20260707e";
   const q = "?v=" + buildTag;
   const files = ds === "fineract"
     ? ["data/signal-store-fineract.js", "data/corpus-index-fineract.js"]
@@ -66,8 +66,8 @@ select option{background:#14171c;color:var(--text)}
 (function() {
   const ds = window.RENDER_DATASET;
   const src = ds === "fineract"
-    ? "data/render-snapshot-data-v3-fineract.js?v=20260707d"
-    : "data/render-snapshot-data-v3.js?v=20260707d";
+    ? "data/render-snapshot-data-v3-fineract.js?v=20260707e"
+    : "data/render-snapshot-data-v3.js?v=20260707e";
   document.write('<script src="' + src + '" onerror="void 0"><\/script>');
 })();
 </script>
