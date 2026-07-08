@@ -265,22 +265,9 @@ function RenderScreen({ mode }) {
   // 재실행 필요셋 — 스냅샷 이후 데이터/프롬프트 갱신으로 결과가 뒤집힐 수 있는 컬럼.
   const RERUN_SETS = {
     mock: [],
-    fineract: [
-      // seed_enrichment v3: 시드 누락 3건 보강 (2026-07-08 · commit 5aa55e5)
-      // 이전 스냅샷 __19_에서 완전 NULL로 관찰된 컬럼들. 시드 반영 후 재실행 필요.
-      // 
-      // (A) m_loan REJECTED 상태 이력 (loan_status_id=500, 188건)
-      "m_loan.rejectedon_date",
-      "m_loan.rejectedon_userid",
-      // (B) m_loan_term_variations audit (247건, v2 백필에서 누락됐던 테이블)
-      "m_loan_term_variations.created_by",
-      "m_loan_term_variations.last_modified_by",
-      "m_loan_term_variations.created_on_utc",
-      "m_loan_term_variations.last_modified_on_utc",
-      // (C) m_loan_repayment_schedule audit (63,837건 bulk)
-      "m_loan_repayment_schedule.created_on_utc",
-      "m_loan_repayment_schedule.last_modified_on_utc",
-    ],
+    // v3 시드 재실행 완료 (__20_ 병합). 남은 MED 2개(term_variations.created_by/last_modified_by)는
+    // Fineract 원본 컬럼 이름 특성(FK 접미사 부재)이라 시드 개선으로 해결 안 됨.
+    fineract: [],
   };
   const ds = window.RENDER_DATASET || "mock";
   const VERIFY_SET = VERIFY_SETS[ds] || [];
