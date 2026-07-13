@@ -77,6 +77,34 @@
                      padding: "3px 8px", whiteSpace: "nowrap" }}>{children}</span>
     );
   }
+  function PipeRow({ tone, label, body }) {
+    const isHere = tone === "here";
+    const labelColor = isHere ? "var(--accent)" : (tone === "downstream" ? "var(--sig)" : "var(--dim)");
+    const bg = isHere ? "rgba(224,178,71,0.06)" : "transparent";
+    const border = isHere ? `1px solid var(--accent)66` : "1px solid transparent";
+    return (
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14, padding: "8px 12px", borderRadius: 6, background: bg, border }}>
+        <span style={{ ...mono, fontSize: 12, color: labelColor, letterSpacing: "0.04em", width: 92, flexShrink: 0 }}>{label}</span>
+        <span style={{ fontSize: 13.5, color: isHere ? "var(--text)" : "var(--muted)", lineHeight: 1.55, fontWeight: isHere ? 500 : 400 }}>{body}</span>
+      </div>
+    );
+  }
+  function PipeArrow({ note }) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 12, minHeight: 18 }}>
+        <span style={{ ...mono, fontSize: 12, color: "var(--dim)" }}>↓</span>
+        {note && <span style={{ fontSize: 12, color: "var(--dim)", fontStyle: "italic" }}>{note}</span>}
+      </div>
+    );
+  }
+  function ToolInternal({ name, body }) {
+    return (
+      <div style={{ display: "flex", gap: 14, padding: "8px 0", borderTop: `1px solid ${RULE}` }}>
+        <span style={{ ...mono, fontSize: 13, color: "var(--sig)", width: 110, flexShrink: 0, paddingTop: 1 }}>{name}</span>
+        <span style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.55 }}>{body}</span>
+      </div>
+    );
+  }
 
   function RenderIntro() {
     return (
@@ -89,6 +117,29 @@
         <p style={{ fontSize: 16, color: "var(--muted)", lineHeight: 1.6, margin: 0, maxWidth: 680 }}>
           DB 컬럼 하나에 대해, NL2SQL 에이전트가 SQL 생성에 <b style={{ color: "var(--text)" }}>검증 없이 그대로 쓸 구조화 슬롯</b>을 합성한다.
         </p>
+
+        {/* 파이프라인 — Render 가 어디에 자리하는가 */}
+        <div style={{ marginTop: 36, border: `1px solid ${RULE}`, borderRadius: 8, padding: "20px 22px", background: "var(--panel)" }}>
+          <div style={{ ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)", marginBottom: 14 }}>파이프라인 속 자리</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <PipeRow tone="upstream" label="원자료" body="DB 스키마 · 코드 코퍼스 · 실데이터" />
+            <PipeArrow note="빌드 프로세스 (build_signals · build_corpus)" />
+            <PipeRow tone="upstream" label="재료" body={<><span style={mono}>signal_store</span> — ORM 파싱·profile·reftable  ·  <span style={mono}>CORPUS</span> — 코드 원문</>} />
+            <PipeArrow />
+            <PipeRow tone="here" label="Render 에이전트" body="컬럼 하나씩 슬롯 저작 (description · capability · codedict · format · aggregation · confidence · review_note · needs_review)" />
+            <PipeArrow />
+            <PipeRow tone="downstream" label="산출물" body="시맨틱 레이어 카탈로그 (컬럼당 슬롯 세트)" />
+            <PipeArrow />
+            <PipeRow tone="downstream" label="소비자" body="NL2SQL 에이전트 — 자연어 질문 → SQL" />
+          </div>
+          <div style={{ height: 1, background: RULE, margin: "18px 0 14px" }} />
+          <div style={{ ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)", marginBottom: 8 }}>재료 규모 · Fineract 예시</div>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", fontSize: 13.5, color: "var(--muted)" }}>
+            <div><b style={{ color: "var(--text)" }}>474</b> 컬럼</div>
+            <div><b style={{ color: "var(--text)" }}>43</b> 코드 그룹</div>
+            <div><b style={{ color: "var(--text)" }}>2,063</b> 파일 · <b style={{ color: "var(--text)" }}>~13MB</b> 코퍼스</div>
+          </div>
+        </div>
 
         {/* 1. 누가 읽는가 */}
         <SectionHead n="01" label="누가 읽는가 — 모든 판단의 기준" />
@@ -156,6 +207,25 @@
           </div>
           <div style={{ fontSize: 12.5, color: "var(--dim)", lineHeight: 1.55, marginTop: 12, fontStyle: "italic" }}>
             도구 사이 고정된 순서는 없다 — 결손이 무엇이냐에 따라 다음 도구가 정해진다. 이는 프롬프트에 명시된 규칙이 아니라 474 컬럼 실행에서 관찰된 시드 리듬이다.
+          </div>
+        </div>
+
+        <div style={{ marginTop: 20, marginBottom: 9, ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)" }}>도구 내부 · 컨텍스트 규율</div>
+        <div style={{ border: `1px solid ${RULE}`, borderRadius: 8, padding: "14px 16px", background: "var(--panel)" }}>
+          <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginBottom: 12 }}>
+            에이전트가 매 턴마다 도구 결과를 다시 다 읽는다. 그래서 도구는 <b style={{ color: "var(--text)" }}>결과를 절단하고 이어읽기 힌트를 준다</b> — 규율이 프롬프트에만 있는 게 아니라 도구 층에도 있다.
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <ToolInternal name="peek_*"
+              body="signal_store 에서 미리 계산된 요약을 반환. 실시간 계산 아님 — 빌드 프로세스에서 파싱해둔 것을 조회만 한다." />
+            <ToolInternal name="list_files"
+              body={<>파일 60개 넘으면 파일 목록 대신 <b style={{ color: "var(--text) "}}>디렉토리별 카운트 요약</b>으로 대체. 컨텍스트 폭탄 방지.</>} />
+            <ToolInternal name="grep_code"
+              body={<>전 파일 리터럴 스캔. 파일별 지도로 반환 — <b style={{ color: "var(--text)" }}>상위 12개만 샘플, 다음 15개는 카운트만</b>, 나머지는 힌트로만. 각 샘플은 앞뒤 최대 4줄, 라인 160자 절단.</>} />
+            <ToolInternal name="read_file"
+              body={<>한 번에 <b style={{ color: "var(--text)" }}>최대 120줄</b>. 초과 시 절단하고 이어읽기 힌트(<span style={mono}>{`{from_line: to+1}`}</span> 로 재호출). 경로는 서픽스 매칭도 허용.</>} />
+            <ToolInternal name="find_refs"
+              body={<><b style={{ color: "var(--text)" }}>선언과 사용을 갈라서</b> 반환 — 정규식 휴리스틱으로 <span style={mono}>class/enum/interface/record</span> 뒤의 심볼은 선언, 나머지는 사용. 선언은 최대 10, 사용은 파일별 상위 12.</>} />
           </div>
         </div>
 
