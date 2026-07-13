@@ -4,10 +4,7 @@
 //   좌: 제어 + 요약 + 테이블별 컬럼 목록. 우: 트레이스(60%) + 컬럼 상세(40%).
 //   window.RenderScreen 으로 노출.
 // ============================================================
-const { useState: rUseState, useRef: rUseRef, useEffect: rUseEffect, createContext: rCreateContext, useContext: rUseContext } = React;
-
-// Render 모드(v2/v3)를 트리 하위로 전파. AnswerCard 가 이 컨텍스트를 읽어 뷰를 결정.
-const RenderModeContext = rCreateContext("v2");
+const { useState: rUseState, useRef: rUseRef, useEffect: rUseEffect } = React;
 
 const R_T = { live: { think: 360, req: 520, done: 460 }, batch: { think: 50, req: 70, done: 60 } };
 const CONFC = { HIGH: "var(--high)", MEDIUM: "var(--med)", LOW: "var(--low)" };
@@ -90,17 +87,13 @@ function ColumnRow({ cid, r, active, busy, onView, onRun }) {
     </div>);
 }
 
-function RenderScreen({ mode }) {
-  // mode: "v2" | "v3". mode 는 트리 하위로 Context 로 전파된다.
-  const isV3 = mode === "v3";
-  const getSystemPrompt = () => isV3 ? window.RenderPromptV3.BALANCED : window.RenderPrompts.current();
-  const getPromptId     = () => isV3 ? "balanced_v3" : window.RenderPrompts.getSelectedId();
-  const getSnapshotSrc  = () => isV3 ? window.RenderSnapshotV3 : window.RenderSnapshot;
-  const snapshotFilename = isV3 ? "render-snapshot-v3.json" : "render-snapshot.json";
-  const headerTitle = isV3 ? "Render v3 · 구조화 슬롯" : "Render v2 · Description";
-  const headerSub   = isV3
-    ? "description + capability · codedict · format · aggregation 을 슬롯으로 저작 — NL2SQL 이 구조화된 슬롯을 그대로 참조"
-    : "부산물 신호(스키마·코드·데이터)만으로 컬럼 Description을 합성 — 라벨 권위를 검증 가능하게 근거 짓는가";
+function RenderScreen() {
+  const getSystemPrompt = () => window.RenderPromptV3.BALANCED;
+  const getPromptId     = () => "balanced_v3";
+  const getSnapshotSrc  = () => window.RenderSnapshotV3;
+  const snapshotFilename = "render-snapshot-v3.json";
+  const headerTitle = "Render v3 · 구조화 슬롯";
+  const headerSub   = "description + capability · codedict · format · aggregation 을 슬롯으로 저작 — NL2SQL 이 구조화된 슬롯을 그대로 참조";
   const [results, setResults] = rUseState({});
   const [active, setActive] = rUseState(null);
   const [busy, setBusy] = rUseState(false);
@@ -365,9 +358,7 @@ function RenderScreen({ mode }) {
       const cnt = Object.keys(loaded).length;
       const model = (snap && snap.model) || "기록";
       const date = (snap && snap.created) ? snap.created.slice(0, 10) : "";
-      const pl = (snap && snap.prompt_id === "balanced_v3")
-        ? " · v3(구조화)"
-        : ((snap && snap.prompt_id && window.RenderPrompts) ? " · " + window.RenderPrompts.get(snap.prompt_id).label.split(" ·")[0] : "");
+      const pl = (snap && snap.prompt_id === "balanced_v3") ? " · v3(구조화)" : "";
       setNote(`스냅샷 로드 — ${cnt}컬럼 · ${model}${pl}${date ? " · " + date : ""}`);
       setTimeout(() => setNote(null), 4000);
     }
@@ -388,7 +379,6 @@ function RenderScreen({ mode }) {
     if (r.answer.route_to_human && r.answer.route_to_human.needed) humanTotal++; });
 
   return (
-    <RenderModeContext.Provider value={mode}>
     <div style={{ display: "grid", gridTemplateColumns: "390px 1fr", gap: 0, height: "calc(100vh - 50px)", overflow: "hidden" }}>
       {/* 좌 — flex column: 상단(header/buttons/summary) 고정, 하단(컬럼 목록) 별도 스크롤 */}
       <div style={{ borderRight: "1px solid var(--rule)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -457,7 +447,6 @@ function RenderScreen({ mode }) {
         </div>
       </div>
     </div>
-    </RenderModeContext.Provider>
   );
 }
 
@@ -504,41 +493,10 @@ function REvent({ e }) {
   return null;
 }
 
-// AnswerCard 디스패처 — mode 에 따라 V2 / V3 뷰 선택.
-function AnswerCard({ a }) {
-  const mode = rUseContext(RenderModeContext);
-  return mode === "v3" ? <AnswerCardV3 a={a} /> : <AnswerCardV2 a={a} />;
-}
-
-// ── v2 뷰 — description·evidence·conflicts·route_to_human 만 ───────────
-function AnswerCardV2({ a }) {
-  if (!a) return null;
-  const c = CONFC[a.confidence] || "var(--dim)";
-  return (
-    <div className="answer" style={{ border: `1px solid ${c}66`, borderLeft: `3px solid ${c}`, borderRadius: 6, padding: "13px 16px", margin: "16px 0 8px", background: "rgba(0,0,0,0.18)" }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 9 }}>
-        <span className="conf" style={{ ...rmono, fontSize: 11, fontWeight: 700, color: "#0c0e11", background: c, borderRadius: 7, padding: "2px 10px", letterSpacing: "0.04em" }}>{a.confidence}</span>
-        {a.route_to_human && a.route_to_human.needed &&
-          <span style={{ fontSize: 12.5, color: "var(--low)", fontWeight: 500 }}>사람 확인 필요 — {a.route_to_human.reason}</span>}
-      </div>
-      <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text)" }}>{a.description}</div>
-      {(a.evidence || []).length > 0 &&
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
-          {a.evidence.map((ev, i) => <span key={i} style={{ ...rmono, fontSize: 11, color: "var(--dim)", border: "1px solid var(--rule)", borderRadius: 5, padding: "1px 7px", background: "rgba(0,0,0,0.25)" }}>{ev}</span>)}
-        </div>}
-      {(a.conflicts || []).map((cf, i) => (
-        <div key={i} className="conflict" style={{ fontSize: 12.5, color: "var(--text)", background: "rgba(224,107,94,0.10)", border: "1px solid rgba(224,107,94,0.32)", borderRadius: 5, padding: "7px 10px", marginTop: 8 }}>
-          <span style={{ ...rmono, fontSize: 11, color: "var(--low)", marginRight: 6 }}>{cf.type}</span>{cf.detail}</div>))}
-    </div>
-  );
-}
-
-// ── v3 뷰 — description + 구조화 슬롯 + review_note ──
+// ── AnswerCard — description + 구조화 슬롯 + review_note ──
 //   스키마: capability{primary,alternatives} · codedict · format ·
 //           aggregation{additive,suggested} · confidence · review_note · needs_review
-//   구 스키마(reasoning·evidence·conflicts·route_to_human) 필드가 스냅샷에 남아
-//   있어도 조용히 무시하고 렌더 가능한 것만 그린다 (하위호환).
-function AnswerCardV3({ a }) {
+function AnswerCard({ a }) {
   if (!a) return null;
   const c = CONFC[a.confidence] || "var(--dim)";
 

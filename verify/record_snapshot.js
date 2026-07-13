@@ -4,18 +4,12 @@
 // 환경변수:
 //   ANTHROPIC_KEY    : 필수
 //   RENDER_MODEL     : 모델 (기본 claude-sonnet-4-6)
-//   RENDER_PROMPT_ID : "balanced_v3" (기본) | "compact"
-//                      balanced_v3 → v3 구조화 슬롯 (prompt-v3.js 의 BALANCED)
-//                      compact     → agent.js 의 RENDER_SYS (v2 압축본)
-//                      나머지 v2 변형은 prompts.js 가 브라우저 전용이라 노드에선 미지원.
 //   RENDER_RAW_LOG   : "1" 이면 각 컬럼의 raw 모델 응답을 data/_raw_<cid>.txt 로 덤프.
 //
 // 산출물:
-//   v3 : data/render-snapshot-data-v3.js  (window.RenderSnapshotV3)
-//   v2 : data/render-snapshot-data.js     (window.RenderSnapshot)
-//   두 파일은 독립적으로 존재. 각 파일은 mode 전용 탭에서만 로드됨.
+//   data/render-snapshot-data-v3.js  (window.RenderSnapshotV3)
 //   헤더 메타: version·kind·mode·model·prompt_id·created + results.
-//   data/_summary.json — 컬럼별 요약(아키타입·신뢰도·ops·dig·human·conflicts·v3 슬롯 채움).
+//   data/_summary.json — 컬럼별 요약(아키타입·신뢰도·ops·dig·human·conflicts·슬롯 채움).
 // ============================================================
 const fs = require("fs"), path = require("path");
 global.window = {};
@@ -28,21 +22,14 @@ const PromptV3 = require("../js/prompt-v3.js");
 
 const KEY = process.env.ANTHROPIC_KEY;
 const MODEL = process.env.RENDER_MODEL || "claude-sonnet-4-6";
-const PROMPT_ID = process.env.RENDER_PROMPT_ID || "balanced_v3";
 const RAW_LOG = process.env.RENDER_RAW_LOG === "1";
 if (!KEY) { console.error("ANTHROPIC_KEY 필요"); process.exit(1); }
 
-const SUPPORTED = new Set(["balanced_v3", "compact"]);
-if (!SUPPORTED.has(PROMPT_ID)) {
-  console.error(`[오류] RENDER_PROMPT_ID="${PROMPT_ID}" 는 노드 측에서 지원 안 함. balanced_v3 또는 compact 만.`);
-  process.exit(1);
-}
-
-const IS_V3 = PROMPT_ID === "balanced_v3";
-const SYSTEM_PROMPT = IS_V3 ? PromptV3.BALANCED : null;  // null 이면 Agent.run 이 자체 RENDER_SYS 사용
-const OUT_MODE = IS_V3 ? "v3" : "v2";
-const OUT_FILE = IS_V3 ? "render-snapshot-data-v3.js" : "render-snapshot-data.js";
-const OUT_GLOBAL = IS_V3 ? "RenderSnapshotV3" : "RenderSnapshot";
+const PROMPT_ID = "balanced_v3";
+const SYSTEM_PROMPT = PromptV3.BALANCED;
+const OUT_MODE = "v3";
+const OUT_FILE = "render-snapshot-data-v3.js";
+const OUT_GLOBAL = "RenderSnapshotV3";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,7 +60,7 @@ async function callModel({ system, user }, cid) {
   }
 }
 
-// v3 슬롯 채움 — answer 에서 추출. v2 응답은 모두 false. 신구 스키마 겸용.
+// 슬롯 채움 — answer 에서 추출.
 function v3Filled(a) {
   if (!a) return { cap: false, codedict: false, format: false, agg: false, note: false };
   const cap = a.capability;
@@ -162,8 +149,8 @@ function v3Filled(a) {
     console.log(`  ${s.cid.padEnd(34)} [${(s.arch||"-").padEnd(14)}] ${s.conf.padEnd(6)} ops=${s.ops} dig=${s.dig} review=${s.human?"Y":"-"} v3=[${slot}]`);
   }
 
-  // v3 슬롯 채움 분포 (v3 모드일 때만 의미)
-  if (IS_V3) {
+  // 슬롯 채움 분포
+  {
     const filledCnt = { cap: 0, codedict: 0, format: 0, agg: 0, note: 0 };
     let answered = 0;
     for (const s of summary) {

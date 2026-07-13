@@ -3,10 +3,8 @@
 //
 // 탭 구성:
 //   intro     · 소개
-//   agent_v2  · Render v2 (Description) — 프롬프트 셀렉터 노출
-//   agent_v3  · Render v3 (구조화 슬롯) — 프롬프트 셀렉터 없음(단일)
+//   agent_v3  · Render (구조화 슬롯) — 탭 키만 agent_v3 로 유지, 표기는 "Render"
 //   explorer  · 데이터 · 코드 탐색
-// v2 와 v3 는 뷰가 다르기 때문에 탭으로 분리. RenderScreen 이 mode props 로 받음.
 //
 // 데이터셋:
 //   mock       — 한국 금융권 6테이블 10컬럼 (자체 mock, PoC)
@@ -106,15 +104,12 @@ function switchDataset(newId) {
 function AppShell() {
   const [tab, setTab] = aUseState("intro");
   const [model, setModelState] = aUseState(window.RenderAPI.getModel());
-  const [prompt, setPromptState] = aUseState(window.RenderPrompts.getSelectedId());
   const dataset = window.RENDER_DATASET || "mock";
   const tabs = [
     ["intro",    "소개"],
-    ["agent_v2", "Render v2"],
-    ["agent_v3", "Render v3"],
+    ["agent_v3", "Render"],
     ["explorer", "데이터 · 코드 탐색"],
   ];
-  const showPromptSelect = tab === "agent_v2";
   return (
     <div>
       <div style={{ display: "flex", gap: 4, padding: "10px 16px 0", borderBottom: "1px solid var(--rule)", alignItems: "flex-end" }}>
@@ -128,14 +123,6 @@ function AppShell() {
               color: tab === k ? "var(--text)" : "var(--dim)",
               borderBottom: tab === k ? "2px solid var(--accent)" : "2px solid transparent" }}>{label}</div>))}
         <div style={{ flex: 1 }} />
-        {showPromptSelect && (
-          <select value={prompt} onChange={(e) => { window.RenderPrompts.setSelectedId(e.target.value); setPromptState(e.target.value); }}
-            title="시스템 프롬프트 — v2 의 표현 변형 (v3 는 단일)"
-            style={{ fontFamily: "var(--mono)", fontSize: 13.5, background: "rgba(0,0,0,0.3)", color: "var(--text)",
-              border: "1px solid var(--rule)", borderRadius: 4, padding: "4px 8px", marginBottom: 7, marginRight: 8, maxWidth: 230 }}>
-            {window.RenderPrompts.LIST.map((p) => <option key={p.id} value={p.id}>프롬프트: {p.label}</option>)}
-          </select>
-        )}
         <select value={model} onChange={(e) => { window.RenderAPI.setModel(e.target.value); setModelState(e.target.value); }}
           style={{ fontFamily: "var(--mono)", fontSize: 13.5, background: "rgba(0,0,0,0.3)", color: "var(--text)",
             border: "1px solid var(--rule)", borderRadius: 4, padding: "4px 8px", marginBottom: 7 }}>
@@ -144,9 +131,7 @@ function AppShell() {
         <div style={{ fontFamily: "var(--mono)", fontSize: 12.5, color: "var(--dim)", paddingBottom: 10, marginLeft: 12 }}>corpus-v1</div>
       </div>
       {tab === "intro" && <window.RenderIntro />}
-      {/* Render v2/v3 는 상태(results, active 등)를 각각 유지하도록 display:none 로 숨긴다 */}
-      <div style={{ display: tab === "agent_v2" ? "block" : "none" }}><window.RenderScreen mode="v2" /></div>
-      <div style={{ display: tab === "agent_v3" ? "block" : "none" }}><window.RenderScreen mode="v3" /></div>
+      <div style={{ display: tab === "agent_v3" ? "block" : "none" }}><window.RenderScreen /></div>
       {tab === "explorer" && <window.RenderExplorer />}
     </div>
   );

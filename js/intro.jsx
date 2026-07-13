@@ -82,7 +82,7 @@
     return (
       <div style={{ maxWidth: 940, margin: "0 auto", padding: "40px 28px 100px" }}>
         {/* 히어로 */}
-        <Eyebrow>Render · v2 — 시맨틱 레이어 증강</Eyebrow>
+        <Eyebrow>Render — 시맨틱 레이어 증강</Eyebrow>
         <h1 style={{ ...mono, fontSize: 32, fontWeight: 600, margin: "0 0 12px", letterSpacing: "-0.01em", color: "var(--text)" }}>
           Render 에이전트
         </h1>

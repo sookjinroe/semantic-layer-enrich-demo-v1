@@ -60,8 +60,7 @@ select option{background:#14171c;color:var(--text)}
   files.forEach(src => document.write('<script src="' + src + q + '"><\/script>'));
 })();
 </script>
-<script src="data/render-snapshot-data.js"></script>
-<!-- v3 스냅샷: 데이터셋별로 다른 파일 (없으면 조용히 무시, 스냅샷 불러오기만 비활성) -->
+<!-- 스냅샷: 데이터셋별로 다른 파일 (없으면 조용히 무시, 스냅샷 불러오기만 비활성) -->
 <script>
 (function() {
   const ds = window.RENDER_DATASET;
@@ -81,7 +80,6 @@ if (window.RENDER_DATASET === "fineract") {
 }
 </script>
 <script src="js/agent.js"></script>
-<script src="js/prompts.js"></script>
 <script src="js/prompt-v3.js"></script>
 <script src="js/live-api.js"></script>
 
