@@ -144,6 +144,21 @@
           <Tool name="find_refs" args="{symbol}" color="var(--lin)"
                 desc="정의(선언)와 사용을 갈라서 준다. 정의를 찾을 때는 grep 보다 빠르다." />
         </ToolGrid>
+        <div style={{ marginTop: 20, marginBottom: 9, ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)" }}>실측된 리듬</div>
+        <div style={{ border: `1px solid ${RULE}`, borderRadius: 8, padding: "14px 16px", background: "var(--panel)" }}>
+          <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.65 }}>
+            대부분의 컬럼은 <span style={{ ...mono, color: "var(--sig)" }}>peek_orm</span> → <span style={{ ...mono, color: "var(--sig)" }}>peek_profile</span> 두 번만으로 끝난다 — 형태와 실물이 확인되면 슬롯을 채울 재료가 다 모인다. 코드 파기는 결손이 남는 소수 컬럼에만 들어가고, <b style={{ color: "var(--text)" }}>무엇이 부족한가에 따라 진입 도구가 갈린다</b>:
+          </div>
+          <div style={{ display: "grid", gap: 6, marginTop: 12, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
+            <div><span style={{ color: "var(--dim)" }}>—</span> 코드값이 공통코드 후보 → <span style={{ ...mono, color: "var(--sig)" }}>peek_reftable</span></div>
+            <div><span style={{ color: "var(--dim)" }}>—</span> 라벨 권위·값의 계보를 찾아야 함 → <span style={{ ...mono, color: "var(--lin)" }}>list_files → grep_code → read_file</span></div>
+            <div><span style={{ color: "var(--dim)" }}>—</span> 정의 위치를 특정해야 함 → <span style={{ ...mono, color: "var(--lin)" }}>find_refs</span></div>
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--dim)", lineHeight: 1.55, marginTop: 12, fontStyle: "italic" }}>
+            도구 사이 고정된 순서는 없다 — 결손이 무엇이냐에 따라 다음 도구가 정해진다. 이는 프롬프트에 명시된 규칙이 아니라 474 컬럼 실행에서 관찰된 시드 리듬이다.
+          </div>
+        </div>
+
         <div style={{ marginTop: 14, padding: "11px 14px", border: `1px solid ${RULE}`, borderLeft: "3px solid var(--med)", borderRadius: 6, background: "var(--panel)", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
           찾아도 없을 수 있다 — 코퍼스에 정의가 없는 컬럼이면 <b style={{ color: "var(--text)" }}>"없다"가 조사의 성과다.</b>
         </div>
