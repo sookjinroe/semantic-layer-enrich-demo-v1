@@ -1,6 +1,6 @@
 // ============================================================
 // intro.jsx — Render 에이전트 소개 화면.
-//   정체와 역할 / 쓰는 도구 / 행동지침(어떻게) / 루프 종료와 트리거.
+//   누가 읽는가 / 조사 — 어떻게 아는가 / 권위와 연결 / 저작과 종료.
 //   앱 디자인 토큰(--accent·--sig·--lin·--panel·--rule, IBM Plex)에 맞춤.
 // window.RenderIntro 로 노출.
 // ============================================================
@@ -87,79 +87,99 @@
           Render 에이전트
         </h1>
         <p style={{ fontSize: 16, color: "var(--muted)", lineHeight: 1.6, margin: 0, maxWidth: 680 }}>
-          DB 컬럼 하나에 대해, NL2SQL 에이전트가 나중에 소비할 <b style={{ color: "var(--text)" }}>비즈니스 Description</b>을 합성한다.
+          DB 컬럼 하나에 대해, NL2SQL 에이전트가 SQL 생성에 <b style={{ color: "var(--text)" }}>검증 없이 그대로 쓸 구조화 슬롯</b>을 합성한다.
         </p>
 
-        {/* 1. 정체와 역할 */}
-        <SectionHead n="01" label="정체와 역할" />
+        {/* 1. 누가 읽는가 */}
+        <SectionHead n="01" label="누가 읽는가 — 모든 판단의 기준" />
         <div style={{ border: `1px solid ${RULE}`, borderRadius: 8, padding: "18px 20px", background: "var(--panel)" }}>
           <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.7 }}>
-            가설은 <b style={{ color: "var(--text)" }}>부산물 신호(스키마·코드·데이터·reftable)만으로 라벨 권위를 검증 가능하게 근거 지을 수 있는가</b>이다.
-            라벨을 '찾는' 것이 아니라, 찾은 매핑이 이 컬럼의 권위인지 '검증'하는 것이 본령이다.
+            NL2SQL 에이전트는 자연어 질문을 SQL 로 바꾸면서 슬롯을 <b style={{ color: "var(--text)" }}>검증 없이 그대로</b> 쓴다.
+            <span style={mono}> capability</span> 로 SQL 의 어느 자리에 넣을지 정하고, <span style={mono}>codedict</span> 로 "승인된 대출"을 <span style={mono}>WHERE stat_cd='03'</span> 으로 바꾸고,
+            <span style={mono}> format</span> 으로 날짜 필터 문자열을 만들고, <span style={mono}>aggregation</span> 으로 SUM 인지 AVG 인지 정하고, <span style={mono}>description</span> 으로 비슷한 컬럼 중 어느 것을 쓸지 가른다.
           </div>
+          <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.7, marginTop: 10 }}>
+            슬롯이 비어 있으면 NL 은 모른다는 걸 알고 다른 경로를 찾는다. 틀린 값이 있으면 모른 채 조용히 틀린 SQL 을 낸다.
+            그래서 이 일의 전부는 <b style={{ color: "var(--text)" }}>확인된 것은 담고, 확인 못 한 것은 비우고, 그 차이를 confidence 와 review_note 로 드러내는 것</b>이다.
+          </div>
+
           <div style={{ height: 1, background: RULE, margin: "16px 0" }} />
-          <div style={{ ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)", marginBottom: 9 }}>소유 경계</div>
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 7 }}>저작한다</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["description", "confidence", "evidence", "conflicts", "route_to_human"].map((x) =>
-                  <Chip key={x} color="var(--accent)">{x}</Chip>)}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 7 }}>읽기만 한다 <span style={{ color: "var(--dim)" }}>· 추출 소유</span></div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["codedict", "classification", "format"].map((x) =>
-                  <Chip key={x} color="var(--dim)">{x}</Chip>)}
-              </div>
-            </div>
+          <div style={{ ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)", marginBottom: 9 }}>저작 슬롯</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["description", "capability", "codedict", "format", "aggregation", "confidence", "review_note", "needs_review"].map((x) =>
+              <Chip key={x} color="var(--accent)">{x}</Chip>)}
+          </div>
+
+          <div style={{ height: 1, background: RULE, margin: "16px 0" }} />
+          <div style={{ ...mono, fontSize: 11.5, letterSpacing: "0.1em", color: "var(--dim)", marginBottom: 9 }}>두 청중</div>
+          <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6 }}>
+            사람 검수자는 <span style={mono}>description</span> 과 <span style={mono}>codedict</span> 만 검수한다 — 이 둘이 비즈니스 언어이기 때문이다.
+            <span style={mono}> capability</span> 와 <span style={mono}>aggregation</span> 은 기계 슬롯이라, 검수자에게는 <span style={mono}>review_note</span> 로 판단 근거만 전한다.
+            <b style={{ color: "var(--text)" }}> needs_review=true</b> 는 NL 에게는 "이 컬럼 유보" 게이트이고, 검수자에게는 확인 요청이다 — 한 필드가 두 청중을 겸직한다.
           </div>
         </div>
 
-        {/* 2. 쓰는 도구 */}
-        <SectionHead n="02" label="쓰는 도구 · 두 티어" />
-        <TierLabel color="var(--sig)" title="tier-1 — 미리 구축된 store 조회" note="쌈 · 결정적 전수. 먼저 쓴다." />
+        {/* 2. 조사 */}
+        <SectionHead n="02" label="조사 — 어떻게 아는가" />
+        <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 4 }}>
+          이름과 타입은 <b style={{ color: "var(--text)" }}>가설</b>을 주지만 <b style={{ color: "var(--text)" }}>근거</b>를 주지는 않는다. 싼 신호부터 본다.
+        </div>
+        <TierLabel color="var(--sig)" title="싼 신호 — 미리 구축된 store 조회" note="결정적 전수. 먼저 쓴다." />
         <ToolGrid>
           <Tool name="peek_orm" color="var(--sig)"
-                desc="파싱된 ORM — 필드명·타입·enum·어노테이션·format·join·deprecated. enum이 있으면 라벨을 직접 준다. 연결 검증의 키가 여기 있다." />
+                desc="파싱된 ORM — 필드명·타입·enum·join. enum 이 있으면 codedict 의 1차 권위. {table, column} 으로 다른 컬럼(FK 대상 등)도 조회한다." />
           <Tool name="peek_profile" color="var(--sig)"
-                desc="데이터 프로파일 — 값공간 distinct·형식·카디널리티·null율. 값공간과 형식은 여기서 얻는다." />
+                desc="실데이터 — distinct 값·추론 형식·null 비율. 컬럼이 실제로 어떤 값을 담는지는 여기서만 안다." />
           <Tool name="peek_reftable" color="var(--sig)"
-                desc="전역 공통코드 덤프(그룹별 코드→라벨). 단 이 컬럼과의 연결은 미선언 — 값집합 매칭/코드 탐색으로 직접 이어야 한다." />
+                desc="전역 공통코드 표. 그룹 목록을 보고 {group:'이름'}으로 조회. 컬럼과의 연결은 선언돼 있지 않다 — 연결은 네가 세운다." />
         </ToolGrid>
-        <TierLabel color="var(--lin)" title="tier-2 — 코드 코퍼스 dig" note="비쌈 · 정적 신호로 안 풀릴 때만." />
+        <TierLabel color="var(--lin)" title="코드 파기 — 조망 → 지도 → 조준" note="위 신호로 안 풀리는 라벨의 권위·값의 계보를 코드에서 찾는다." />
         <ToolGrid>
-          <Tool name="grep_code" args="{query}" color="var(--lin)"
-                desc="코퍼스 전문 검색 → {file, line, text} 목록." />
-          <Tool name="read_file" args="{path}" color="var(--lin)"
-                desc="파일 전문 읽기 — 라벨·계보의 맥락 확인." />
+          <Tool name="list_files" args="{dir?, pattern?}" color="var(--lin)"
+                desc="구조를 먼저 본다 — 조망. 어디에 무엇이 있는지 모른 채 검색부터 하지 않는다." />
+          <Tool name="grep_code" args="{query, context?}" color="var(--lin)"
+                desc="리터럴 부분일치(정규식 아님). 결과는 파일별 지도 — 매치 밀집이 유망하지만, 밀집이 곧 권위는 아니다(리포트는 사용만 많을 뿐이다)." />
+          <Tool name="read_file" args="{path, from_line?, to_line?}" color="var(--lin)"
+                desc="지도에서 고른 위치를 범위로 읽는다 — 조준. 큰 파일을 통째로 읽지 않는다." />
           <Tool name="find_refs" args="{symbol}" color="var(--lin)"
-                desc="식별자 참조 위치 추적 — 컬럼명에서 출발해 타고 들어가 연결을 검증한다." />
+                desc="정의(선언)와 사용을 갈라서 준다. 정의를 찾을 때는 grep 보다 빠르다." />
         </ToolGrid>
-
-        {/* 3. 행동지침 */}
-        <SectionHead n="03" label="행동지침 · 어떻게 움직이는가" />
-        <div style={{ display: "grid", gap: 10 }}>
-          <Principle accent="var(--accent)" lead="자율적이되 비용 규율이 있는 점증 탐색"
-            body="고정 파이프라인이 아니다. 싼 tier-1부터 쓰고, 결손이 남을 때만 비싼 tier-2 dig로 노력을 끌어올린다 — 게으른(frugal) 에스컬레이션." />
-          <Principle accent="var(--sig)" lead="기본 태도는 회의(懷疑)와 검증"
-            body="값집합이 겹친다고 받아들이지 않는다. 그 매핑이 이 컬럼의 권위인지(ORM 필드명 연결·같은 도메인) 확인될 때까지 단정하지 않고, 이름·값 일치 같은 표면 신호는 검증 전엔 추정으로만 다룬다." />
-          <Principle accent="var(--lin)" lead="불확실성은 한정하거나 넘긴다"
-            body="검증이 안 되면 단정 대신 한정(hedge), 후보가 여럿이면 conflicts에 기록, 권위가 없으면 route_to_human으로 사람에게 넘긴다. 모르더라도 '불명'으로 붕괴하지 않고 잔여 정보를 최대화한다." />
+        <div style={{ marginTop: 14, padding: "11px 14px", border: `1px solid ${RULE}`, borderLeft: "3px solid var(--med)", borderRadius: 6, background: "var(--panel)", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
+          찾아도 없을 수 있다 — 코퍼스에 정의가 없는 컬럼이면 <b style={{ color: "var(--text)" }}>"없다"가 조사의 성과다.</b>
         </div>
 
-        {/* 4. 루프 종료와 트리거 */}
-        <SectionHead n="04" label="루프 종료와 트리거" />
+        {/* 3. 권위와 연결 */}
+        <SectionHead n="03" label="권위와 연결 — 가장 흔한 함정" />
+        <div style={{ display: "grid", gap: 10 }}>
+          <Principle accent="var(--accent)" lead="값 겹침 ≠ 권위"
+            body='코드 어딘가에서 case "01":"접수" 를 찾았다고 그게 이 컬럼의 매핑인 건 아니다. 서로 다른 코드 체계가 같은 값 집합({01,02,03})을 흔히 쓴다. 연결로 확인하라 — 그 매핑이 이 컬럼의 ORM 필드명을 키로 쓰는가(switch(loanStatusCode))? 같은 도메인의 코드인가? 값만 겹치는 매핑을 채택하면 NL 이 남의 코드 체계로 이 컬럼을 필터링하게 된다.' />
+          <Principle accent="var(--sig)" lead="권위에는 위계가 있다"
+            body="enum·코드 선언(정의)이 1차 권위다. 리포트·뷰의 표시용 CASE 문은 정의를 베낀 2차 가공이라 틀리거나 남의 것일 수 있다. 정의를 우선하고, 표시용 매핑은 대조 자료로만 쓴다." />
+          <Principle accent="var(--lin)" lead="불일치는 종결 신호가 아니다"
+            body="찾은 매핑과 실데이터가 어긋나면(매핑에 없는 값이 데이터에 있거나 그 반대) 그 매핑은 불완전하거나 남의 것이다 — 이 불일치는 아직 진짜 권위를 못 찾았다는 신호다. 예산이 남았으면 다른 형태의 권위를 더 찾는다. 다 쓰고도 없으면 찾은 만큼 담고 미확인을 표시하는 것이 정직한 답이다." />
+        </div>
+
+        {/* 4. 저작과 종료 */}
+        <SectionHead n="04" label="저작과 종료" />
+        <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 12 }}>
+          조사에서는 오늘의 데이터와 개발자의 코드를 보지만, 산출물은 <b style={{ color: "var(--text)" }}>데이터가 리프레시된 몇 달 뒤에도 읽힐 카탈로그 문서</b>이고 독자는 코드를 보지 않는 사람이다. 담기 전에 번역한다.
+        </div>
         <div style={{ border: `1px solid ${RULE}`, borderRadius: 8, overflow: "hidden", background: "var(--panel)" }}>
-          <div style={{ padding: "11px 14px", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
-            매니페스트 시드로 시작해, 결손이 남는 동안만 도구를 호출하는 need-loop. JSON 하나씩만 출력한다.
-          </div>
-          <SpecRow k="진입(시드)">대상 컬럼 스키마 + 당길 수 있는 tier-1 신호 목록(매니페스트) → 결손이 남으면 tier-2 dig.</SpecRow>
-          <SpecRow k="종료 액션"><span style={mono}>answer</span> — description·confidence·evidence·conflicts·route_to_human.</SpecRow>
-          <SpecRow k="연산 상한">컬럼당 12연산 · 남은 횟수 0이면 반드시 answer.</SpecRow>
-          <SpecRow k="중복 가드">같은 op를 같은 인자로 반복하면 무시된다.</SpecRow>
-          <SpecRow k="실패 트리거">JSON 파싱 실패 시 기록 후 한 번 더 기회(루프 계속).</SpecRow>
+          <SpecRow k="관측 → 성질">
+            <span style={{ color: "var(--dim)" }}>"98%가 NULL"</span> 이 아니라 <b style={{ color: "var(--text)" }}>"상각 처리된 대출에만 채워진다"</b>. 수치는 성질의 근거일 때만 자리가 있다.
+          </SpecRow>
+          <SpecRow k="개발 어휘 → 업무 언어">
+            cardinality·null_rate 는 독자에게 외국어다. <span style={{ color: "var(--dim)" }}>"distinct 값 1개"</span> 가 아니라 <b style={{ color: "var(--text)" }}>"모든 행이 같은 값"</b>.
+          </SpecRow>
+          <SpecRow k="confidence 3단">
+            <b style={{ color: "var(--high)" }}>HIGH</b> 담은 단정이 다 확인 · <b style={{ color: "var(--med)" }}>MEDIUM</b> 일부 추정이거나 미확인 남음 · <b style={{ color: "var(--low)" }}>LOW</b> 정체부터 불확실.
+          </SpecRow>
+          <SpecRow k="needs_review 게이트">
+            NL 이 잘못된 SQL 을 낼 <b style={{ color: "var(--text)" }}>실질 위험</b>이 있을 때만 <span style={mono}>true</span> — 핵심 슬롯(라벨·형식·역할)의 권위 미확인, 출처 충돌. 주변적 미확인(실물 대조 불가, 사용 이력 없음)은 review_note 에만 남기고 <span style={mono}>false</span>.
+          </SpecRow>
+          <SpecRow k="종료 조건">
+            핵심 슬롯이 다 채워졌거나, 못 채운 슬롯을 확인할 <b style={{ color: "var(--text)" }}>수단이 더 없을 때</b>. 상한은 컬럼당 12연산.
+          </SpecRow>
         </div>
       </div>
     );
