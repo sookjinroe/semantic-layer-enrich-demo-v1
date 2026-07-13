@@ -65,8 +65,8 @@ select option{background:#14171c;color:var(--text)}
 (function() {
   const ds = window.RENDER_DATASET;
   const src = ds === "fineract"
-    ? "data/render-snapshot-data-v3-fineract.js?v=20260707g"
-    : "data/render-snapshot-data-v3.js?v=20260707e";
+    ? "data/render-snapshot-data-v3-fineract.js?v=202607130801g"
+    : "data/render-snapshot-data-v3.js?v=202607130801e";
   document.write('<script src="' + src + '" onerror="void 0"><\/script>');
 })();
 </script>
@@ -76,7 +76,7 @@ select option{background:#14171c;color:var(--text)}
 <!-- Fineract 데이터셋일 때만 TABLE_LABEL/TABLE_ORDER 오버라이드 -->
 <script>
 if (window.RENDER_DATASET === "fineract") {
-  document.write('<script src="data/render-meta-fineract.js?v=20260708a"><\/script>');
+  document.write('<script src="data/render-meta-fineract.js?v=202607130801a"><\/script>');
 }
 </script>
 <script src="js/agent.js"></script>
