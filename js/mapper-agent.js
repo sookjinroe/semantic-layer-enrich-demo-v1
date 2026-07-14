@@ -53,6 +53,35 @@ function userPrompt(seed, scopeTables, log, left) {
   return userBlocks(seed, scopeTables, log, left).map((b) => b.text).join("\n");
 }
 
+// 테이블명은 유추가 아니라 사실이다 — mappings 의 table 이 실존 테이블명 집합에 없으면
+// 토큰 집합 매칭(m_loan_product ↔ m_product_loan)으로 교정 시도. 원본은 table_agent 로 보존.
+// 교정 불가면 needs_review. 근거: 전량 174 실측 — 최대 단일 실패축이 m_product_loan 유추 오기.
+function correctTableNames(action, entityTables, scopeTables) {
+  const real = new Set([...Object.values(entityTables || {}), ...scopeTables]);
+  const byTokens = new Map();
+  for (const t of real) {
+    const key = t.split("_").sort().join("_");
+    if (!byTokens.has(key)) byTokens.set(key, []);
+    byTokens.get(key).push(t);
+  }
+  const notes = [];
+  for (const m of action.mappings || []) {
+    if (real.has(m.table)) continue;
+    const cands = byTokens.get(m.table.split("_").sort().join("_")) || [];
+    if (cands.length === 1) {
+      m.table_agent = m.table;
+      m.table = cands[0];
+      notes.push(`table 교정: ${m.table_agent} → ${m.table}`);
+    } else {
+      m.table_unverified = true;
+      notes.push(`table 미실존·교정 불가: ${m.table}`);
+      action.needs_review = true;
+    }
+  }
+  if (notes.length) action.correction_note = notes.join(" · ");
+  return action;
+}
+
 // scope 는 판단이 아니라 계산이다 — mappings 의 테이블이 스코프 목록에 있는지로 결정.
 // 에이전트의 자기 분류는 scope_agent 로 보존 (분류 정확도 추적용), 최종 scope 는 기계값.
 // 근거: v0.2 실측에서 매핑은 정확한데 분류만 틀리는 형식 위반 3건 — 이 축을 원리적으로 소멸.
@@ -94,6 +123,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
     }
 
     if (action.action === "answer") {
+      correctTableNames(action, seeds.entity_tables, scopeTables);
       recomputeScope(action, scopeTables);
       trace.push({ kind: "answer", ...action });
       if (onStep) await onStep({ kind: "answer", ...action });
@@ -126,6 +156,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   let action = null;
   try { action = JSON.parse(RA.stripFences(raw)); } catch (e) { /* noop */ }
   if (action && action.action === "answer") {
+    correctTableNames(action, seeds.entity_tables, scopeTables);
     recomputeScope(action, scopeTables);
     trace.push({ kind: "answer", ...action });
     if (onStep) await onStep({ kind: "answer", ...action });
@@ -139,7 +170,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   return { seed: seedName, answer: forced, trace, ops: log.length, forced: true };
 }
 
-const API = { MAX_OPS, seedText, userBlocks, userPrompt, recomputeScope, run };
+const API = { MAX_OPS, seedText, userBlocks, userPrompt, correctTableNames, recomputeScope, run };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.MapperAgent = API;
 
