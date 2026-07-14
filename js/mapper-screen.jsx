@@ -291,6 +291,7 @@
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <span style={{ ...mono, fontSize: 11, fontWeight: 700, color: "#0c0e11", background: c, borderRadius: 7, padding: "2px 10px" }}>{a.confidence}</span>
           <span style={{ ...mono, fontSize: 12, color: SCOPEC[a.scope] || "var(--text)", fontWeight: 700 }}>{a.scope}</span>
+          {a.scope_agent && <span style={{ ...mono, fontSize: 10.5, color: "var(--dim)" }}>분류 교정 (에이전트: {a.scope_agent})</span>}
           {a.forced && <span style={{ fontSize: 12, color: "var(--low)" }}>강제 종결</span>}
           {a.needs_review && <span style={{ fontSize: 12, color: "var(--low)" }}>검수 필요</span>}
         </div>

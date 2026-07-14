@@ -53,6 +53,20 @@ function userPrompt(seed, scopeTables, log, left) {
   return userBlocks(seed, scopeTables, log, left).map((b) => b.text).join("\n");
 }
 
+// scope 는 판단이 아니라 계산이다 — mappings 의 테이블이 스코프 목록에 있는지로 결정.
+// 에이전트의 자기 분류는 scope_agent 로 보존 (분류 정확도 추적용), 최종 scope 는 기계값.
+// 근거: v0.2 실측에서 매핑은 정확한데 분류만 틀리는 형식 위반 3건 — 이 축을 원리적으로 소멸.
+function recomputeScope(action, scopeTables) {
+  const ms = action.mappings || [];
+  const inScope = new Set(scopeTables);
+  let scope;
+  if (ms.length === 0) scope = "not_db";
+  else if (ms.some((m) => inScope.has(m.table))) scope = "mapped";
+  else scope = "out_of_scope";
+  if (action.scope !== scope) { action.scope_agent = action.scope; action.scope = scope; }
+  return action;
+}
+
 // run(seedName, { seeds, store, corpus, callModel, onStep, system })
 async function run(seedName, { seeds, store, corpus, callModel, onStep, system }) {
   if (!system) throw new Error("system 프롬프트 미주입");
@@ -80,6 +94,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
     }
 
     if (action.action === "answer") {
+      recomputeScope(action, scopeTables);
       trace.push({ kind: "answer", ...action });
       if (onStep) await onStep({ kind: "answer", ...action });
       return { seed: seedName, answer: action, trace, ops: log.length };
@@ -111,6 +126,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   let action = null;
   try { action = JSON.parse(RA.stripFences(raw)); } catch (e) { /* noop */ }
   if (action && action.action === "answer") {
+    recomputeScope(action, scopeTables);
     trace.push({ kind: "answer", ...action });
     if (onStep) await onStep({ kind: "answer", ...action });
     return { seed: seedName, answer: action, trace, ops: log.length };
@@ -123,7 +139,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   return { seed: seedName, answer: forced, trace, ops: log.length, forced: true };
 }
 
-const API = { MAX_OPS, seedText, userBlocks, userPrompt, run };
+const API = { MAX_OPS, seedText, userBlocks, userPrompt, recomputeScope, run };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.MapperAgent = API;
 
