@@ -108,6 +108,7 @@ function AppShell() {
   const tabs = [
     ["intro",    "소개"],
     ["agent_v3", "Render"],
+    ["mapper",   "Mapper"],
     ["explorer", "데이터 · 코드 탐색"],
   ];
   return (
@@ -132,6 +133,7 @@ function AppShell() {
       </div>
       {tab === "intro" && <window.RenderIntro />}
       <div style={{ display: tab === "agent_v3" ? "block" : "none" }}><window.RenderScreen /></div>
+      <div style={{ display: tab === "mapper" ? "block" : "none" }}><window.MapperScreen /></div>
       {tab === "explorer" && <window.RenderExplorer />}
     </div>
   );
