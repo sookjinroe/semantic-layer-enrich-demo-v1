@@ -38,6 +38,9 @@ window.RenderAPI = (function () {
   function hasKey() { return !!getKey(); }
 
   // agent.js 와 계약: 원문 텍스트 반환(파싱은 agent.js). 3회 지수 백오프.
+  // user 는 문자열(단일 블록) 또는 content 블록 배열({type:"text",text,cache_control?})을 받는다.
+  // 블록 배열이면 프롬프트 캐싱이 동작 — 마지막 캐시 블록까지의 접두가 5분 캐시에 올라
+  // 다음 턴의 동일 접두는 0.1배 요금으로 읽힌다.
   async function callModel({ system, user }, opts) {
     await ENV_READY;
     const { onRetry } = opts || {};
@@ -48,16 +51,20 @@ window.RenderAPI = (function () {
       headers["anthropic-version"] = "2023-06-01";
       headers["anthropic-dangerous-direct-browser-access"] = "true";
     }
+    const content = typeof user === "string" ? user : user;
     let lastErr = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const resp = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST", headers,
           body: JSON.stringify({ model: getModel(), max_tokens: 1024,
-            system, messages: [{ role: "user", content: user }] }),
+            system, messages: [{ role: "user", content }] }),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        if (data.usage && (data.usage.cache_read_input_tokens || data.usage.cache_creation_input_tokens)) {
+          console.log(`[cache] read=${data.usage.cache_read_input_tokens || 0} write=${data.usage.cache_creation_input_tokens || 0} fresh=${data.usage.input_tokens || 0}`);
+        }
         return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
       } catch (e) {
         lastErr = e;

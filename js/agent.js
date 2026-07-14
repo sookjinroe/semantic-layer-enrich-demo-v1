@@ -250,21 +250,34 @@ function seedText(store, cid) {
   ].join("\n");
 }
 
-function userPrompt(store, cid, log, left) {
-  const parts = [seedText(store, cid)];
-  if (log.length) {
-    parts.push("", "[조회/탐색 기록]");
-    // 마지막(최신) 결과는 온전히 가깝게(6000자), 과거 결과는 압축(1200자).
-    // 모델이 방금 요청한 정보는 다 보고, 지난 것은 요지만 남긴다.
-    log.forEach((e, i) => {
-      const limit = i === log.length - 1 ? 8000 : 1200;
-      let body = JSON.stringify(e.result);
-      if (body.length > limit) body = body.slice(0, limit) + "…(생략)";
-      parts.push(`${i + 1}. ${e.op}(${JSON.stringify(e.args || {})}) → ${body}`);
-    });
+// 캐시 블록 구조 — 블록1(시드+과거 로그 1200자 고정 절단, append-only, cache_control) +
+// 블록2(직전 결과 8000자 + 푸터). 과거 절단폭이 고정이라 블록1 접두가 턴 간 불변 → 증분 캐시 히트.
+function userBlocks(store, cid, log, left) {
+  const fmt = (e, cap) => {
+    let body = JSON.stringify(e.result);
+    if (body.length > cap) body = body.slice(0, cap) + "…(생략)";
+    return `${e.op}(${JSON.stringify(e.args || {})}) → ${body}`;
+  };
+  const head = [seedText(store, cid)];
+  if (log.length > 1) {
+    head.push("", "[조회/탐색 기록]");
+    log.slice(0, -1).forEach((e, i) => head.push(`${i + 1}. ${fmt(e, 1200)}`));
   }
-  parts.push("", `[남은 횟수] ${left}`, "", "JSON 하나로 답하라.");
-  return parts.join("\n");
+  const tail = [];
+  if (log.length) {
+    if (log.length === 1) tail.push("", "[조회/탐색 기록]");
+    tail.push(`${log.length}. ${fmt(log[log.length - 1], 8000)}`);
+  }
+  tail.push("", `[남은 횟수] ${left}`, "", "JSON 하나로 답하라.");
+  return [
+    { type: "text", text: head.join("\n"), cache_control: { type: "ephemeral" } },
+    { type: "text", text: tail.join("\n") },
+  ];
+}
+
+// 단일 문자열 조립 — 노드 하니스·시뮬 호환용.
+function userPrompt(store, cid, log, left) {
+  return userBlocks(store, cid, log, left).map((b) => b.text).join("\n");
 }
 
 // ── 루프 ─────────────────────────────────────────────────────────────────────
@@ -279,7 +292,7 @@ async function run(cid, { store, corpus, callModel, onStep, system }) {
 
   for (let t = 0; t < MAX_OPS; t++) {
     const left = MAX_OPS - t;
-    const user = userPrompt(store, cid, log, left);
+    const user = userBlocks(store, cid, log, left);
     const raw = await callModel({ system: sys, user });
     let action;
     try {
@@ -323,7 +336,7 @@ async function run(cid, { store, corpus, callModel, onStep, system }) {
   }
 
   // 상한 도달 — 강제 종결 신호를 마지막 한 번 더 요청
-  const user = userPrompt(store, cid, log, 0);
+  const user = userBlocks(store, cid, log, 0);
   const raw = await callModel({ system: sys, user });
   let action;
   try { action = JSON.parse(stripFences(raw)); } catch (e) { action = null; }
@@ -358,7 +371,7 @@ function stripFences(s) {
   return s.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 }
 
-const API = { MAX_OPS, makeTools, manifest, seedText, userPrompt, run, dispatch, stripFences };
+const API = { MAX_OPS, makeTools, manifest, seedText, userBlocks, userPrompt, run, dispatch, stripFences };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.RenderAgent = API;
 

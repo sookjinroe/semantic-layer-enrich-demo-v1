@@ -21,19 +21,36 @@ function seedText(seed, scopeTables) {
   return parts.join("\n");
 }
 
-function userPrompt(seed, scopeTables, log, left) {
-  const parts = [seedText(seed, scopeTables), ""];
-  if (log.length) {
-    parts.push("[지금까지의 조사]");
-    log.forEach((e, i) => {
-      const limit = i === log.length - 1 ? 8000 : 1200;
-      let body = JSON.stringify(e.result);
-      if (body.length > limit) body = body.slice(0, limit) + "…(생략)";
-      parts.push(`${i + 1}. ${e.op}(${JSON.stringify(e.args || {})}) → ${body}`);
-    });
+// 캐시 블록 구조의 user content:
+//   블록1 (cache_control): 시드 + 과거 로그(일괄 1200자 절단 — append-only 라 턴 간 접두 불변)
+//   블록2 (매턴 신규):     직전 op 결과(8000자) + 남은 횟수 + 지시
+// 과거 항목의 절단폭이 고정이므로 블록1은 턴마다 뒤에만 자라고, 접두 캐시가 증분으로 히트한다.
+function userBlocks(seed, scopeTables, log, left) {
+  const fmt = (e, cap) => {
+    let body = JSON.stringify(e.result);
+    if (body.length > cap) body = body.slice(0, cap) + "…(생략)";
+    return `${e.op}(${JSON.stringify(e.args || {})}) → ${body}`;
+  };
+  const head = [seedText(seed, scopeTables), ""];
+  if (log.length > 1) {
+    head.push("[지금까지의 조사]");
+    log.slice(0, -1).forEach((e, i) => head.push(`${i + 1}. ${fmt(e, 1200)}`));
   }
-  parts.push("", `[남은 횟수] ${left}`, "", "JSON 하나로 답하라.");
-  return parts.join("\n");
+  const tail = [];
+  if (log.length) {
+    if (log.length === 1) tail.push("[지금까지의 조사]");
+    tail.push(`${log.length}. ${fmt(log[log.length - 1], 8000)}`);
+  }
+  tail.push("", `[남은 횟수] ${left}`, "", "JSON 하나로 답하라.");
+  return [
+    { type: "text", text: head.join("\n"), cache_control: { type: "ephemeral" } },
+    { type: "text", text: tail.join("\n") },
+  ];
+}
+
+// 단일 문자열 조립 — 노드 하니스·시뮬 호환용.
+function userPrompt(seed, scopeTables, log, left) {
+  return userBlocks(seed, scopeTables, log, left).map((b) => b.text).join("\n");
 }
 
 // run(seedName, { seeds, store, corpus, callModel, onStep, system })
@@ -51,7 +68,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
 
   for (let t = 0; t < MAX_OPS; t++) {
     const left = MAX_OPS - t;
-    const user = userPrompt(seed, scopeTables, log, left);
+    const user = userBlocks(seed, scopeTables, log, left);
     const raw = await callModel({ system, user });
     let action;
     try {
@@ -90,7 +107,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   }
 
   // 상한 도달 — 마지막 한 번 answer 요청
-  const raw = await callModel({ system, user: userPrompt(seed, scopeTables, log, 0) });
+  const raw = await callModel({ system, user: userBlocks(seed, scopeTables, log, 0) });
   let action = null;
   try { action = JSON.parse(RA.stripFences(raw)); } catch (e) { /* noop */ }
   if (action && action.action === "answer") {
@@ -106,7 +123,7 @@ async function run(seedName, { seeds, store, corpus, callModel, onStep, system }
   return { seed: seedName, answer: forced, trace, ops: log.length, forced: true };
 }
 
-const API = { MAX_OPS, seedText, userPrompt, run };
+const API = { MAX_OPS, seedText, userBlocks, userPrompt, run };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.MapperAgent = API;
 
